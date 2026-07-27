@@ -27,13 +27,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: packages/api-contract/package-lock.json
-
-      - name: Install contract tooling
-        working-directory: packages/api-contract
-        run: npm ci
 
       - name: Lint OpenAPI
-        working-directory: packages/api-contract
-        run: npm run lint
+        run: npx --yes @redocly/cli@1.34.2 lint packages/api-contract/openapi.yaml
