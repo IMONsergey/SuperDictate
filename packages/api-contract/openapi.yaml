@@ -1,0 +1,427 @@
+openapi: 3.1.0
+info:
+  title: SuperDictate API
+  version: 0.1.0
+  description: Versioned contract shared by Apple, Android, wearable and web clients.
+servers:
+  - url: https://api.superdictate.app
+security:
+  - bearerAuth: []
+paths:
+  /v1/recordings:
+    get:
+      operationId: listRecordings
+      parameters:
+        - in: query
+          name: cursor
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Recording page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingPage'
+    post:
+      operationId: createRecording
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRecordingRequest'
+      responses:
+        '201':
+          description: Recording created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recording'
+  /v1/recordings/{recordingId}:
+    get:
+      operationId: getRecording
+      parameters:
+        - $ref: '#/components/parameters/RecordingId'
+      responses:
+        '200':
+          description: Recording and current processing result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingDetail'
+  /v1/recordings/{recordingId}/upload-intent:
+    post:
+      operationId: createUploadIntent
+      parameters:
+        - $ref: '#/components/parameters/RecordingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUploadIntentRequest'
+      responses:
+        '200':
+          description: Direct object-storage upload instructions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadIntent'
+  /v1/recordings/{recordingId}/complete-upload:
+    post:
+      operationId: completeUpload
+      parameters:
+        - $ref: '#/components/parameters/RecordingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteUploadRequest'
+      responses:
+        '202':
+          description: Upload accepted and processing queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recording'
+  /v1/recordings/{recordingId}/markers:
+    post:
+      operationId: createMarker
+      parameters:
+        - $ref: '#/components/parameters/RecordingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMarkerRequest'
+      responses:
+        '201':
+          description: Marker created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Marker'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    RecordingId:
+      in: path
+      name: recordingId
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+  schemas:
+    RecordingMode:
+      type: string
+      enum:
+        - quick_thought
+        - dictation
+        - meeting
+        - client_corrections
+        - interview
+        - daily_memory
+        - custom
+    RecordingStatus:
+      type: string
+      enum:
+        - local
+        - awaiting_upload
+        - uploading
+        - uploaded
+        - queued
+        - transcribing
+        - structuring
+        - ready
+        - failed
+        - deleted
+    SourcePlatform:
+      type: string
+      enum:
+        - macos
+        - ios
+        - watchos
+        - android
+        - wearos
+        - web
+        - windows
+    CreateRecordingRequest:
+      type: object
+      required:
+        - clientRecordingId
+        - sourcePlatform
+        - mode
+        - startedAt
+      properties:
+        clientRecordingId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        sourcePlatform:
+          $ref: '#/components/schemas/SourcePlatform'
+        mode:
+          $ref: '#/components/schemas/RecordingMode'
+        customTemplateId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        projectId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        startedAt:
+          type: string
+          format: date-time
+        locale:
+          type: string
+          examples:
+            - ru-RU
+    CreateUploadIntentRequest:
+      type: object
+      required:
+        - fileName
+        - contentType
+        - byteLength
+        - sha256
+      properties:
+        fileName:
+          type: string
+        contentType:
+          type: string
+          enum:
+            - audio/mp4
+            - audio/mpeg
+            - audio/ogg
+            - audio/wav
+        byteLength:
+          type: integer
+          minimum: 1
+        sha256:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+    UploadIntent:
+      type: object
+      required:
+        - uploadId
+        - method
+        - url
+        - expiresAt
+      properties:
+        uploadId:
+          type: string
+          format: uuid
+        method:
+          type: string
+          enum:
+            - PUT
+        url:
+          type: string
+          format: uri
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+    CompleteUploadRequest:
+      type: object
+      required:
+        - uploadId
+        - durationMs
+      properties:
+        uploadId:
+          type: string
+          format: uuid
+        durationMs:
+          type: integer
+          minimum: 1
+        endedAt:
+          type: string
+          format: date-time
+    CreateMarkerRequest:
+      type: object
+      required:
+        - offsetMs
+        - kind
+      properties:
+        offsetMs:
+          type: integer
+          minimum: 0
+        kind:
+          type: string
+          enum:
+            - important
+            - task
+            - decision
+            - question
+        note:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+    Marker:
+      type: object
+      required:
+        - id
+        - offsetMs
+        - kind
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        offsetMs:
+          type: integer
+        kind:
+          type: string
+        note:
+          type:
+            - string
+            - 'null'
+        createdAt:
+          type: string
+          format: date-time
+    Recording:
+      type: object
+      required:
+        - id
+        - clientRecordingId
+        - sourcePlatform
+        - mode
+        - status
+        - startedAt
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        clientRecordingId:
+          type: string
+          format: uuid
+        sourcePlatform:
+          $ref: '#/components/schemas/SourcePlatform'
+        mode:
+          $ref: '#/components/schemas/RecordingMode'
+        status:
+          $ref: '#/components/schemas/RecordingStatus'
+        projectId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        durationMs:
+          type:
+            - integer
+            - 'null'
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProcessingResult:
+      type: object
+      properties:
+        transcript:
+          type:
+            - string
+            - 'null'
+        summary:
+          type:
+            - string
+            - 'null'
+        tasks:
+          type: array
+          items:
+            type: object
+            required:
+              - text
+            properties:
+              text:
+                type: string
+              owner:
+                type:
+                  - string
+                  - 'null'
+              dueAt:
+                type:
+                  - string
+                  - 'null'
+                format: date-time
+        decisions:
+          type: array
+          items:
+            type: string
+        errorCode:
+          type:
+            - string
+            - 'null'
+    RecordingDetail:
+      type: object
+      required:
+        - recording
+        - markers
+        - result
+      properties:
+        recording:
+          $ref: '#/components/schemas/Recording'
+        markers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Marker'
+        result:
+          $ref: '#/components/schemas/ProcessingResult'
+    RecordingPage:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Recording'
+        nextCursor:
+          type:
+            - string
+            - 'null'
