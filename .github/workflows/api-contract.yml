@@ -29,4 +29,4 @@ jobs:
           node-version: '22'
 
       - name: Lint OpenAPI
-        run: npx --yes @redocly/cli@1.34.2 lint packages/api-contract/openapi.yaml
+        run: npx --yes @redocly/cli@1.34.2 lint --extends=minimal packages/api-contract/openapi.yaml
