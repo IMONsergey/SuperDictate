@@ -1,0 +1,27 @@
+name: Apple core
+
+on:
+  pull_request:
+    paths:
+      - 'packages/apple-core/**'
+      - '.github/workflows/apple-core.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/apple-core/**'
+      - '.github/workflows/apple-core.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test SuperDictateCore
+        run: swift test --package-path packages/apple-core
