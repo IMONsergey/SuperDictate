@@ -150,7 +150,8 @@ final class UploadQueueCoordinatorTests: XCTestCase {
             savedQueue.entries.first(where: { $0.id == entry.id })?.state,
             .succeeded
         )
-        XCTAssertEqual(await transport.callCount(), 1)
+        let transportCallCount = await transport.callCount()
+        XCTAssertEqual(transportCallCount, 1)
     }
 
     func testRecoverableFailurePersistsRetryAndAttentionState() async throws {
@@ -243,7 +244,8 @@ final class UploadQueueCoordinatorTests: XCTestCase {
             savedQueue.entries.first(where: { $0.id == entry.id })?.state,
             .failedPermanent
         )
-        XCTAssertEqual(await transport.callCount(), 0)
+        let transportCallCount = await transport.callCount()
+        XCTAssertEqual(transportCallCount, 0)
     }
 
     func testCoordinatorEnqueueRemainsIdempotent() async throws {
@@ -265,7 +267,8 @@ final class UploadQueueCoordinatorTests: XCTestCase {
         )
 
         XCTAssertEqual(first.id, second.id)
-        XCTAssertEqual((await queueStore.snapshot()).entries.count, 1)
+        let queueSnapshot = await queueStore.snapshot()
+        XCTAssertEqual(queueSnapshot.entries.count, 1)
     }
 
     func testRecoveryRestoresInterruptedAttempt() async throws {
