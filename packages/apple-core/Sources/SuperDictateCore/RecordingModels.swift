@@ -22,8 +22,12 @@ public enum SourcePlatform: String, Codable, CaseIterable, Sendable {
 
 public enum ProcessingStage: String, Codable, CaseIterable, Sendable {
     case queued
+    case validatingSource = "validating_source"
     case transcribing
     case structuring
+    case summarizing
+    case extractingActions = "extracting_actions"
+    case awaitingReview = "awaiting_review"
 }
 
 public enum RecordingMarkerKind: String, Codable, CaseIterable, Sendable {

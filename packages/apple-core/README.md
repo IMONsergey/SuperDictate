@@ -14,6 +14,8 @@ Shared domain package for macOS, iOS and watchOS clients.
 - append-only recovery journaling and package recovery classification;
 - Apple audio capture/session coordination boundaries;
 - AVFoundation PCM-to-CAF chunk encoding and tap source boundaries;
+- local AI processing jobs, model descriptors and adapter protocols;
+- offline summary, insight and action extraction fallbacks;
 - platform-neutral domain tests.
 
 ## Explicitly outside this package
@@ -24,9 +26,9 @@ Shared domain package for macOS, iOS and watchOS clients.
 - UI and haptics;
 - authentication token storage;
 - concrete API transport;
-- transcription engines.
+- concrete neural transcription or LLM runtime binaries.
 
-Audio-session, UI, networking and transcription concerns must be provided by platform adapters. File-system persistence lives here only where it is platform-family domain logic: recording packages, manifests, immutable chunks, upload queues and recovery results. This keeps capture durability testable before AVFoundation, WatchConnectivity or background transfer adapters are wired in.
+Audio-session, UI, networking and neural runtime concerns must be provided by platform adapters. File-system persistence lives here only where it is platform-family domain logic: recording packages, manifests, immutable chunks, upload queues, recovery results and local processing contracts. This keeps capture durability and processing semantics testable before AVFoundation, WatchConnectivity, background transfer, WhisperKit, whisper.cpp or llama.cpp adapters are wired in.
 
 ## Recording package layout
 
@@ -71,3 +73,15 @@ result is ready          -> completed
 ```
 
 Platform adapters must persist enough information to reconstruct the current state after a process termination. The state machine itself intentionally does not perform I/O.
+
+## Local AI processing
+
+`LocalAIProcessingPipeline` validates a durable local recording package, calls a local transcription adapter, then produces optional summaries, insight candidates and local action items. Transcription is required; summaries and insight extraction are partial-success stages, so a failed optional stage records a `LocalProcessingIssue` instead of discarding the transcript.
+
+The package ships no neural model weights. `LocalAIModelCatalog` describes supported offline adapter families:
+
+- `whisper.cpp` or `WhisperKit` for local transcription;
+- `llama.cpp`/GGUF-compatible local instruct models for summaries and structured extraction;
+- bundled rule-based summary/action extraction as the offline fallback before a neural model is installed.
+
+Concrete adapters must keep generated text separate from transcript layers and must attach evidence spans to extracted decisions, actions, risks and questions.
