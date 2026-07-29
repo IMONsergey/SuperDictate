@@ -70,7 +70,8 @@ final class AVFoundationChunkEngineTests: XCTestCase {
         _ = try await recorder.persist(secondChunk, chunkID: UUID())
 
         let snapshot = await writer.snapshot()
-        XCTAssertEqual(await recorder.currentSequence(), 2)
+        let currentSequence = await recorder.currentSequence()
+        XCTAssertEqual(currentSequence, 2)
         XCTAssertEqual(
             snapshot.events,
             [
@@ -110,7 +111,8 @@ final class AVFoundationChunkEngineTests: XCTestCase {
             _ = try await recorder.persist(chunk)
             XCTFail("empty encoded chunks should fail before writer open")
         } catch AVFoundationChunkEngineError.emptyEncodedChunk {
-            XCTAssertEqual(await writer.snapshot().events, [])
+            let snapshot = await writer.snapshot()
+            XCTAssertEqual(snapshot.events, [])
         }
     }
 }
