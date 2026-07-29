@@ -16,6 +16,7 @@ Shared domain package for macOS, iOS and watchOS clients.
 - AVFoundation PCM-to-CAF chunk encoding and tap source boundaries;
 - local AI processing jobs, model descriptors and adapter protocols;
 - offline summary, insight and action extraction fallbacks;
+- native workbench state for recorder, processing, transcript, summary, actions and models;
 - platform-neutral domain tests.
 
 ## Explicitly outside this package
@@ -85,3 +86,16 @@ The package ships no neural model weights. `LocalAIModelCatalog` describes suppo
 - bundled rule-based summary/action extraction as the offline fallback before a neural model is installed.
 
 Concrete adapters must keep generated text separate from transcript layers and must attach evidence spans to extracted decisions, actions, risks and questions.
+
+## Product workbench
+
+`SuperDictateWorkbenchState` is the platform-neutral view state for the native app surface. It combines a recording manifest, transcript, summary, extracted insights, local actions, processing issues and model install state into:
+
+- available product tabs;
+- headline metrics;
+- status badges;
+- primary command;
+- processing progress;
+- model readiness by capability.
+
+Native AppKit, SwiftUI, iOS and watchOS surfaces should render from this state instead of duplicating status logic per platform.

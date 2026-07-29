@@ -34,6 +34,7 @@ The current foundation adds the shared contracts for that flow. Platform adapter
 - `LocalAudioTranscribing`, `LocalTranscriptSummarizing` and `LocalInsightExtracting`;
 - timed transcript and summary artifact models;
 - local processing jobs, events, issues and results;
+- `SuperDictateWorkbenchState` for native product tabs, metrics, commands and status badges;
 - bundled rule-based summary and insight extraction fallback;
 - conversion from action insights to local `ActionItem` objects.
 
@@ -127,6 +128,8 @@ The next native UI stage should expose these first-class surfaces:
 - Models: installed engines, download size, license, local-only toggle and privacy policy.
 
 The UI should look dense and professional: command-center layout, strong hierarchy, no landing page, no decorative cards around every section, and clear status chips for local/private/needs-review/failed states.
+
+`SuperDictateWorkbenchState` now provides the shared source of truth for this surface. Native views should render its `availableTabs`, `headlineMetrics`, `badges`, `primaryCommand`, `processingProgress` and `modelStates` rather than re-deriving state in each platform target.
 
 ## Next implementation steps
 
