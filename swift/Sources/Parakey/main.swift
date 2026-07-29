@@ -34,6 +34,9 @@ import FluidAudio
 import IOKit
 import QuartzCore
 import ServiceManagement
+import SwiftUI
+import SuperDictateAppleUI
+import SuperDictateCore
 import UniformTypeIdentifiers
 
 // MARK: - Constants
@@ -9569,6 +9572,7 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var didLogDeferredWakeRecovery = false
     private var didOfferSetupChecklistThisLaunch = false
     private var setupChecklistWindow: NSWindow?
+    private var workbenchWindow: NSWindow?
     private var setupChecklistRefreshTimer: Timer?
     private var hotkeyTestSucceeded = false
     private var recordingLevelTimer: Timer?
@@ -12042,6 +12046,192 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         rebuildMenu()
     }
 
+    @objc private func openWorkbenchClicked(_ sender: NSMenuItem) {
+        showWorkbench()
+    }
+
+    private func showWorkbench(selectedTab: SuperDictateWorkbenchTab? = nil) {
+        let tab = selectedTab ?? preferredWorkbenchTab()
+        let state = currentWorkbenchState(selectedTab: tab)
+        let rootView = SuperDictateWorkbenchView(
+            state: state,
+            onCommand: { [weak self] command in
+                Task { @MainActor in
+                    self?.handleWorkbenchCommand(command)
+                }
+            },
+            onSelectTab: { [weak self] tab in
+                Task { @MainActor in
+                    self?.showWorkbench(selectedTab: tab)
+                }
+            }
+        )
+        let controller = NSHostingController(rootView: rootView)
+
+        let window: NSWindow
+        if let existing = workbenchWindow {
+            window = existing
+            window.contentViewController = controller
+        } else {
+            window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 1120, height: 720),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "SuperDictate Workbench"
+            window.isReleasedWhenClosed = false
+            window.delegate = self
+            window.contentViewController = controller
+            workbenchWindow = window
+        }
+
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        log("workbench opened tab=\(tab.rawValue)")
+    }
+
+    private func handleWorkbenchCommand(_ command: SuperDictateWorkbenchCommand) {
+        switch command.id {
+        case "record":
+            handlePress()
+        case "stop":
+            handleRelease()
+        case "recover":
+            if startupFailure != nil {
+                startStartup(reason: "workbench recover")
+            } else {
+                showWorkbench(selectedTab: .processing)
+            }
+        case "review":
+            showWorkbench(selectedTab: .actions)
+        case "open-summary":
+            showWorkbench(selectedTab: command.targetTab)
+        default:
+            showWorkbench(selectedTab: command.targetTab)
+        }
+    }
+
+    private func preferredWorkbenchTab() -> SuperDictateWorkbenchTab {
+        if isBusy || startupFailure != nil {
+            return .processing
+        }
+        if !visibleHistory.isEmpty {
+            return .transcript
+        }
+        return .recorder
+    }
+
+    private func currentWorkbenchState(
+        selectedTab: SuperDictateWorkbenchTab
+    ) -> SuperDictateWorkbenchState {
+        let transcript = latestWorkbenchTranscript()
+        return SuperDictateWorkbenchState(
+            manifest: currentWorkbenchManifest(),
+            selectedTab: selectedTab,
+            activeProcessingStage: isBusy ? .transcribing : nil,
+            transcript: transcript,
+            insights: [],
+            actionItems: [],
+            issues: currentWorkbenchIssues(),
+            modelStates: currentWorkbenchModelStates(),
+            recoveryState: nil
+        )
+    }
+
+    private func latestWorkbenchTranscript() -> LocalTranscript? {
+        guard let entry = visibleHistory.first else {
+            return nil
+        }
+        let recordingID = UUID()
+        let estimatedDurationMilliseconds = max(1_000, Int64(entry.text.count * 42))
+        guard let segment = try? LocalTranscriptSegment(
+            startOffsetMilliseconds: 0,
+            endOffsetMilliseconds: estimatedDurationMilliseconds,
+            text: entry.text
+        ) else {
+            return nil
+        }
+        return LocalTranscript(
+            recordingID: recordingID,
+            localeIdentifier: workbenchLocaleIdentifier(),
+            modelID: settings.speechModelProfile.shortName,
+            segments: [segment]
+        )
+    }
+
+    private func currentWorkbenchManifest() -> LocalRecordingManifest? {
+        let localState: LocalRecordingState
+        if isRecording {
+            localState = .open
+        } else if isBusy {
+            localState = .processing
+        } else {
+            return nil
+        }
+
+        let descriptor = RecordingDescriptor(
+            sourcePlatform: .macOS,
+            mode: .dictation,
+            localeIdentifier: workbenchLocaleIdentifier()
+        )
+        return try? LocalRecordingManifest(
+            descriptor: descriptor,
+            productPolicy: RecordingMode.dictation.defaultProductPolicy,
+            localState: localState
+        )
+    }
+
+    private func currentWorkbenchIssues() -> [LocalProcessingIssue] {
+        guard let startupFailure else {
+            return []
+        }
+        return [
+            LocalProcessingIssue(
+                recordingID: UUID(),
+                stage: startupFailure.stage == .speechModel ? .transcribing : .validatingSource,
+                message: startupFailure.detail
+            ),
+        ]
+    }
+
+    private func currentWorkbenchModelStates() -> [LocalModelRuntimeState] {
+        let speechModel = LocalAIModelDescriptor(
+            id: "fluidaudio.\(settings.speechModelProfile.rawValue)",
+            displayName: settings.speechModelProfile.shortName,
+            adapterKind: .custom,
+            capabilities: [.transcription],
+            licenseSummary: "Local FluidAudio speech model used by the macOS runtime.",
+            approximateDiskBytes: settings.speechModelProfile.estimatedDownloadBytes,
+            requiresNetworkDownload: false,
+            notes: settings.speechModelProfile.aboutModelText
+        )
+        let installState: LocalModelInstallState
+        if isSpeechModelReady {
+            installState = .ready
+        } else if startupTask != nil || isSwitchingSpeechModel || isResettingSpeechModelCache {
+            installState = .downloading
+        } else {
+            installState = .notInstalled
+        }
+        let runtimeModel = LocalModelRuntimeState(
+            model: speechModel,
+            installState: installState,
+            downloadProgress: speechModelStartupProgressFraction ?? (isSpeechModelReady ? 1 : 0),
+            lastErrorMessage: startupFailure?.stage == .speechModel ? startupFailure?.detail : nil
+        )
+        return [runtimeModel] + SuperDictateWorkbenchState.defaultModelStates()
+    }
+
+    private func workbenchLocaleIdentifier() -> String {
+        let language = settings.dictationLanguage
+        guard language != .auto else {
+            return Locale.current.identifier
+        }
+        return language.rawValue
+    }
+
     private func toggleHistoryOverlay() {
         if statisticsOverlayPresented {
             closeStatisticsOverlay()
@@ -12857,6 +13047,14 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             menu.addItem(.separator())
         }
 
+        let workbench = NSMenuItem(title: "Open Workbench…",
+                                   action: #selector(openWorkbenchClicked(_:)),
+                                   keyEquivalent: "")
+        workbench.target = self
+        menu.addItem(workbench)
+
+        menu.addItem(.separator())
+
         // Settings submenu.
         menu.addItem(buildSettingsItem())
         menu.addItem(buildSupportItem())
@@ -13202,10 +13400,15 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow,
-              window === setupChecklistWindow else { return }
-        stopSetupChecklistRefreshTimer()
-        refreshActivationPolicy()
+        guard let window = notification.object as? NSWindow else { return }
+        if window === workbenchWindow {
+            workbenchWindow = nil
+            return
+        }
+        if window === setupChecklistWindow {
+            stopSetupChecklistRefreshTimer()
+            refreshActivationPolicy()
+        }
     }
 
     private func startSetupChecklistRefreshTimer() {
