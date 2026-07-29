@@ -9,12 +9,14 @@ Shared domain package for macOS, iOS and watchOS clients.
 - recording lifecycle state machine;
 - upload and processing boundaries;
 - retry semantics;
+- JSON-backed recording manifests and upload queue stores;
+- crash-safe immutable chunk writing;
+- append-only recovery journaling and package recovery classification;
 - platform-neutral domain tests.
 
 ## Explicitly outside this package
 
 - `AVAudioSession` and microphone permissions;
-- file-system implementation;
 - background transfer implementation;
 - WatchConnectivity;
 - UI and haptics;
@@ -22,7 +24,24 @@ Shared domain package for macOS, iOS and watchOS clients.
 - concrete API transport;
 - transcription engines.
 
-Those concerns must be provided by platform adapters. This keeps the state machine deterministic and testable across macOS, iPhone and Apple Watch.
+Audio-session, UI, networking and transcription concerns must be provided by platform adapters. File-system persistence lives here only where it is platform-family domain logic: recording packages, manifests, immutable chunks, upload queues and recovery results. This keeps capture durability testable before AVFoundation, WatchConnectivity or background transfer adapters are wired in.
+
+## Recording package layout
+
+`ChunkFileWriter` stores local recordings under the same root used by `JSONRecordingManifestStore`:
+
+```text
+recordings/<client-recording-id>/
+  manifest.json
+  recovery-journal.jsonl
+  chunks/
+    <asset-id>__000000__<chunk-id>.caf
+  quarantine/
+```
+
+Chunks are immutable after close. Active chunks use the configured temporary suffix, are flushed and closed before the final rename, then the manifest is atomically updated. Recovery scans the manifest, journal, finalized chunk files and partial files; it recovers closed orphan chunks, quarantines partial or corrupt files, and marks the manifest `needs_attention` when source bytes require user-visible handling.
+
+The default chunk policy targets 20 second chunks, allows up to 30 seconds per chunk, uses SHA-256 checksums and the `.caf` extension. The writer is container-neutral: AVFoundation adapters supply encoded bytes and timing metadata, while this package enforces durable ordering and recovery semantics.
 
 ## Run tests
 
