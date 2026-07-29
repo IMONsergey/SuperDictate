@@ -12,6 +12,7 @@ Shared domain package for macOS, iOS and watchOS clients.
 - JSON-backed recording manifests and upload queue stores;
 - crash-safe immutable chunk writing;
 - append-only recovery journaling and package recovery classification;
+- Apple audio capture/session coordination boundaries;
 - platform-neutral domain tests.
 
 ## Explicitly outside this package
