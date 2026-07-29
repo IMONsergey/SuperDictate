@@ -13,6 +13,7 @@ Shared domain package for macOS, iOS and watchOS clients.
 - crash-safe immutable chunk writing;
 - append-only recovery journaling and package recovery classification;
 - Apple audio capture/session coordination boundaries;
+- AVFoundation PCM-to-CAF chunk encoding and tap source boundaries;
 - platform-neutral domain tests.
 
 ## Explicitly outside this package

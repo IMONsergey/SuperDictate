@@ -36,6 +36,16 @@ marker requested         -> emit marker only while capture is active/paused/inte
 
 The platform adapter executes those effects with AVFoundation and `ChunkFileWriter`. Unit tests cover the decision layer; hardware tests must cover the concrete adapter.
 
+## AVFoundation chunk engine
+
+The first concrete runtime layer is split into three pieces:
+
+- `AVAudioEngineBufferTap` owns the native input tap and emits `AVAudioPCMBuffer` values from the current device format.
+- `AVFoundationPCMChunkEncoder` converts a completed PCM segment into CAF container bytes, duration metadata and RMS level metadata.
+- `AppleEncodedChunkRecorder` persists encoded CAF bytes through `ChunkFileWriter`, preserving the durable open/write/close/checksum/manifest order from the chunk writer.
+
+This keeps the audio callback small: collect buffers for a rotation window, close that window, encode it into a CAF chunk, and persist that chunk through the writer actor. The current engine does not perform UI work, upload work, transcription, or automatic deletion of partial source bytes.
+
 ## iOS plan
 
 - Use `AVAudioSession` with an explicit record category and spoken-audio oriented mode after device validation.
@@ -67,6 +77,7 @@ The platform adapter executes those effects with AVFoundation and `ChunkFileWrit
 - Force-kill after finalized chunk file but before manifest commit; recovery must append the chunk once.
 - Fill storage below the low-storage threshold; capture must fail visibly without deleting source bytes.
 - Watch: screen off, companion unavailable, low battery, and direct-network unavailable cases.
+- Verify that generated chunk files begin with the CAF magic bytes and can be opened by `AVAudioFile`.
 
 ## Simulator limitations
 
