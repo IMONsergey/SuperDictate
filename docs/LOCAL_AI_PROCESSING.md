@@ -131,6 +131,8 @@ The UI should look dense and professional: command-center layout, strong hierarc
 
 `SuperDictateWorkbenchState` now provides the shared source of truth for this surface. Native views should render its `availableTabs`, `headlineMetrics`, `badges`, `primaryCommand`, `processingProgress` and `modelStates` rather than re-deriving state in each platform target.
 
+`packages/apple-ui` contains the first SwiftUI implementation of this workbench. It renders the shared state into a native command-center layout while keeping recording, persistence and model runtime work in platform adapters.
+
 ## Next implementation steps
 
 1. Add a native SwiftUI shell around recorder, processing, transcript, summary and actions.
