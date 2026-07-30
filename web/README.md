@@ -22,10 +22,16 @@ Current preview surface:
 - chunk sealing, byte counts and SHA-256 verification;
 - marker capture;
 - local recovery journal with crash/recover simulation;
-- model selection, with Whisper.cpp Base selected for Intel testing;
-- transcript paste/browser speech entry and rule-based local summary/actions;
+- app-style navigation across Today, Capture, Library, Transcript, AI Review,
+  Tasks, Ask, People, Models, Settings and Export;
+- model selection, with Whisper.cpp Small shown as the recommended Intel UX
+  target while the current native bootstrap still installs Whisper.cpp Base;
+- transcript paste/browser speech entry and rule-based local AI Review/actions;
+- evidence chips, mind-map preview, Ask scope chips and calendar task scheduling
+  for product-flow testing;
 - one-click demo flow and JSON export for quick product review.
 
 Native Intel transcription is tracked separately in the `feature/intel-whisper-model-choice` branch and will use a local `whisper-cli` runtime.
 
-Design direction is tracked in `docs/DESIGN_REFERENCE_SYSTEM.md`.
+Design direction is tracked in `docs/DESIGN_REFERENCE_SYSTEM.md` and
+`docs/POCKET_ALTERNATIVE_PRODUCT_RESEARCH.md`.

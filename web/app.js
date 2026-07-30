@@ -1,5 +1,13 @@
 "use strict";
 
+window.__superdictateErrors = [];
+window.addEventListener("error", (event) => {
+  window.__superdictateErrors.push(event.message || String(event.error || "error"));
+});
+window.addEventListener("unhandledrejection", (event) => {
+  window.__superdictateErrors.push(event.reason?.message || String(event.reason || "unhandled rejection"));
+});
+
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
@@ -7,11 +15,13 @@ const elements = {
   runtimeLine: $("#runtimeLine"),
   runtimeDot: $("#runtimeDot"),
   runtimeStatus: $("#runtimeStatus"),
+  globalSearch: $("#globalSearch"),
   modelSelect: $("#modelSelect"),
   demoBtn: $("#demoBtn"),
   exportBtn: $("#exportBtn"),
   pipeline: $("#pipeline"),
   pipelineExport: $("#pipelineExport"),
+  navList: $("#navList"),
   stepRecord: $("#stepRecord"),
   stepTranscript: $("#stepTranscript"),
   stepSummary: $("#stepSummary"),
@@ -68,6 +78,20 @@ const elements = {
   sourceCard: $("#sourceCard"),
   modelCard: $("#modelCard"),
   packageCard: $("#packageCard"),
+  startTodayBtn: $("#startTodayBtn"),
+  openTranscriptBtn: $("#openTranscriptBtn"),
+  openReviewBtn: $("#openReviewBtn"),
+  modelRecommendation: $("#modelRecommendation"),
+  processingStateList: $("#processingStateList"),
+  calendarQueue: $("#calendarQueue"),
+  libraryList: $("#libraryList"),
+  evidenceList: $("#evidenceList"),
+  mindMap: $("#mindMap"),
+  askScopeList: $("#askScopeList"),
+  askInput: $("#askInput"),
+  askRunBtn: $("#askRunBtn"),
+  askAnswer: $("#askAnswer"),
+  peopleList: $("#peopleList"),
 };
 
 const STORAGE_KEY = "superdictate.web.workbench.v3";
@@ -77,12 +101,28 @@ const CHUNK_STORE = "chunks";
 
 const modelCatalog = [
   {
+    id: "whisper_cpp_small",
+    title: "Whisper.cpp Small",
+    shortTitle: "Whisper.cpp Small",
+    subtitle: "Рекомендовано для Intel preview: лучший баланс качества, скорости и веса.",
+    status: "выбрана",
+    tags: ["Intel", "RU/EN", "~466 MB"],
+  },
+  {
     id: "whisper_cpp_base",
     title: "Whisper.cpp Base",
     shortTitle: "Whisper.cpp Base",
-    subtitle: "Лучший старт для Intel: бесплатно, локально, RU/EN, CPU.",
-    status: "выбрана",
-    tags: ["Intel", "RU/EN", "~150 MB"],
+    subtitle: "Самый легкий Intel fallback, если Small слишком медленная на CPU.",
+    status: "fallback",
+    tags: ["Intel", "быстрее", "~150 MB"],
+  },
+  {
+    id: "whisper_cpp_medium",
+    title: "Whisper.cpp Medium",
+    shortTitle: "Whisper.cpp Medium",
+    subtitle: "Более точная локальная модель для длинных встреч, когда latency приемлема.",
+    status: "качество",
+    tags: ["Intel", "медленнее", "~1.5 GB"],
   },
   {
     id: "parakeet_tdt_v3",
@@ -91,14 +131,6 @@ const modelCatalog = [
     subtitle: "Apple Silicon: FluidAudio, CoreML, ANE.",
     status: "нативная",
     tags: ["M1+", "offline", "~700 MB"],
-  },
-  {
-    id: "whisper_cpp_small",
-    title: "Whisper.cpp Small",
-    shortTitle: "Whisper Small",
-    subtitle: "Следующий кандидат, когда стабилизируем latency на Intel.",
-    status: "следующая",
-    tags: ["качество", "медленнее"],
   },
   {
     id: "local_summarizer",
@@ -110,14 +142,17 @@ const modelCatalog = [
   },
 ];
 
-const sampleTranscript = `Решили тестировать Intel preview на Whisper.cpp Base, потому что модель бесплатная, локальная и достаточно быстрая для первого запуска на CPU. Нужно сделать интерфейс понятнее: показать шаги записи, транскрипта, выжимки, задач и экспорта. Сергей попросил, чтобы пользователь мог выбрать модель, а по умолчанию для Intel стоял Whisper.cpp Base. Риск: web preview не должен притворяться полноценным native ASR, поэтому надо явно показывать, где браузерная демо-обработка, а где будущий native whisper.cpp. Договорились сначала довести рабочий web workbench, потом допилить native Intel backend и открыть PR.`;
+const sampleTranscript = `Решили делать SuperDictate как app-only альтернативу Pocket: запись с Mac, iPhone, Android и часов без отдельного устройства. Action item: сначала переделать первый экран в Today, Capture, Library, AI Review, Tasks, Ask и Models. Решение: для Intel preview ставим Whisper.cpp Small, потому что это бесплатная локальная модель с нормальным балансом качества и скорости. Риск: интерфейс не должен обещать cloud magic, если сейчас работает browser preview и будущий native whisper.cpp backend. Нужно показывать evidence у задач, делать кнопку календаря и дать пользователю спросить текущую запись. Договорились после web preview допилить native Intel transcription runtime и модельный менеджер.`;
 
 const state = {
   sessionId: crypto.randomUUID(),
   mode: "Dictation",
   status: "idle",
-  activeTab: "recorder",
-  selectedModel: "whisper_cpp_base",
+  activeTab: "today",
+  selectedModel: "whisper_cpp_small",
+  askScope: "recording",
+  askQuestion: "",
+  askAnswer: "",
   chunkWindowSec: 5,
   chunks: [],
   markers: [],
@@ -152,6 +187,9 @@ function hydrate() {
       "status",
       "activeTab",
       "selectedModel",
+      "askScope",
+      "askQuestion",
+      "askAnswer",
       "chunkWindowSec",
       "chunks",
       "markers",
@@ -175,6 +213,9 @@ function persist() {
     status: state.status === "recording" || state.status === "paused" ? "recoverable" : state.status,
     activeTab: state.activeTab,
     selectedModel: state.selectedModel,
+    askScope: state.askScope,
+    askQuestion: state.askQuestion,
+    askAnswer: state.askAnswer,
     chunkWindowSec: state.chunkWindowSec,
     chunks: state.chunks.map(serializableChunk),
     markers: state.markers,
@@ -280,13 +321,17 @@ function render() {
   renderSession();
   renderPanels();
   renderResults();
+  renderWorkbench();
   renderExport();
 }
 
 function renderModelControls() {
   const selected = selectedModel();
-  elements.runtimeLine.textContent = `Локальная диктовка · ${selected.shortTitle}`;
+  elements.runtimeLine.textContent = `Conversation memory OS · ${selected.shortTitle}`;
   elements.selectedModelLabel.textContent = selected.shortTitle;
+  if (elements.modelRecommendation) {
+    elements.modelRecommendation.textContent = `${selected.shortTitle}: ${selected.subtitle}`;
+  }
 
   elements.modelSelect.innerHTML = modelCatalog
     .filter((model) => model.id !== "local_summarizer")
@@ -294,6 +339,7 @@ function renderModelControls() {
     .join("");
   elements.modelSelect.value = state.selectedModel;
 
+  if (!elements.modelList) return;
   elements.modelList.innerHTML = "";
   for (const model of modelCatalog) {
     const card = document.createElement("article");
@@ -305,6 +351,7 @@ function renderModelControls() {
       <div class="model-meta">
         <span class="pill">${escapeHtml(model.status)}</span>
         ${model.tags.map((tag) => `<span class="pill">${escapeHtml(tag)}</span>`).join("")}
+        <span class="pill good">${model.id.startsWith("whisper_cpp") ? "free OSS" : "local"}</span>
       </div>
       <button class="button ${model.id === state.selectedModel ? "primary-text" : "ghost"}" type="button">
         ${model.id === state.selectedModel ? "Используется" : selectable ? "Выбрать" : "Скоро"}
@@ -330,10 +377,15 @@ function renderPipeline() {
   });
   elements.stepRecord.textContent = state.chunks.length ? fragmentLabel(state.chunks.length) : "микрофон готов";
   elements.stepTranscript.textContent = state.transcript.trim() ? `${wordCount(state.transcript)} слов` : "текст пуст";
-  elements.stepSummary.textContent = state.summary ? "готова" : "не создана";
+  elements.stepSummary.textContent = state.summary ? "готов" : "не создан";
   elements.stepTasks.textContent = taskLabel(state.actions.length);
   if (elements.stepExport) {
     elements.stepExport.textContent = exportReady() ? "можно скачать" : "нет данных";
+  }
+  if (elements.navList) {
+    $$(".nav-item[data-tab]").forEach((button) => {
+      button.classList.toggle("active", state.activeTab === button.dataset.tab);
+    });
   }
 }
 
@@ -349,9 +401,12 @@ function stepComplete(tab) {
 function renderSession() {
   const modeLabels = {
     Meeting: "Встреча",
+    Discovery: "Discovery",
     Thought: "Мысль",
     Dictation: "Диктовка",
     Interview: "Интервью",
+    Lecture: "Лекция",
+    Daily: "Daily memory",
   };
   elements.activeModeLabel.textContent = modeLabels[state.mode] || state.mode;
   $$(".mode-row").forEach((button) => {
@@ -365,8 +420,8 @@ function renderSession() {
   elements.cafLabel.textContent = `${state.chunkWindowSec} сек`;
   elements.transcriptInput.value = state.transcript;
   elements.transcriptStatus.textContent = transcriptStatusText();
-  elements.summaryStatus.textContent = state.summary ? "Выжимка создана локально в preview." : "Добавьте текст и запустите выжимку.";
-  elements.taskStatus.textContent = state.actions.length ? taskLabel(state.actions.length) : "Задачи появятся после выжимки.";
+  elements.summaryStatus.textContent = state.summary ? "AI Review создан локально в preview." : "Добавьте текст и запустите AI Review.";
+  elements.taskStatus.textContent = state.actions.length ? `${taskLabel(state.actions.length)} · ${scheduledTaskCount()} в календаре` : "Задачи появятся после выжимки.";
   if (elements.sourceCard) {
     elements.sourceCard.textContent = state.transcript.trim() ? `${wordCount(state.transcript)} слов в тексте` : "микрофон или текстовый ввод";
   }
@@ -375,6 +430,17 @@ function renderSession() {
   }
   if (elements.packageCard) {
     elements.packageCard.textContent = `${fragmentLabel(state.chunks.length)} · ${elements.recoveryState.textContent.toLowerCase()}`;
+  }
+  if (elements.askInput && document.activeElement !== elements.askInput) {
+    elements.askInput.value = state.askQuestion;
+  }
+  if (elements.askAnswer) {
+    elements.askAnswer.textContent = state.askAnswer || "Задайте вопрос после демо или вставки transcript.";
+  }
+  if (elements.askScopeList) {
+    $$(".scope-chip[data-scope]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.scope === state.askScope);
+    });
   }
 }
 
@@ -456,6 +522,157 @@ function renderExport() {
   elements.exportPreview.textContent = exportPackageText();
 }
 
+function renderWorkbench() {
+  renderProcessingState();
+  renderCalendarQueue();
+  renderLibrary();
+  renderEvidence();
+  renderMindMap();
+  renderPeople();
+}
+
+function renderProcessingState() {
+  if (!elements.processingStateList) return;
+  const states = [
+    ["Saved locally", state.chunks.length > 0 || state.transcript.trim(), state.status === "recording"],
+    ["Transcript ready", state.transcript.trim(), false],
+    ["AI Review ready", state.summary, state.status === "processing"],
+    ["Tasks extracted", state.actions.length > 0, false],
+    ["Memory indexed", state.summary && state.actions.length > 0, false],
+  ];
+  elements.processingStateList.innerHTML = "";
+  for (const [title, complete, active] of states) {
+    const item = document.createElement("div");
+    item.className = `state-item${complete ? " complete" : ""}${active ? " active" : ""}`;
+    item.innerHTML = `
+      <span class="state-dot"></span>
+      <strong>${escapeHtml(title)}</strong>
+      <span>${complete ? "done" : active ? "active" : "waiting"}</span>
+    `;
+    elements.processingStateList.appendChild(item);
+  }
+}
+
+function renderCalendarQueue() {
+  if (!elements.calendarQueue) return;
+  elements.calendarQueue.innerHTML = "";
+  const unscheduled = state.actions.filter((task) => !task.calendarState);
+  if (!state.actions.length) {
+    elements.calendarQueue.appendChild(emptyItem("calendar-item", "Нет задач для календаря. Запустите демо или AI Review."));
+    return;
+  }
+  for (const task of state.actions.slice(0, 5)) {
+    const item = document.createElement("article");
+    item.className = "calendar-item";
+    item.innerHTML = `
+      <strong>${escapeHtml(task.title)}</strong>
+      <span>${task.calendarState ? "Запланировано" : "Нужно назначить время"} · ${escapeHtml(task.evidence || task.source)}</span>
+    `;
+    elements.calendarQueue.appendChild(item);
+  }
+  if (unscheduled.length) {
+    const item = document.createElement("article");
+    item.className = "calendar-item";
+    item.innerHTML = `<strong>Day One rule</strong><span>${taskLabel(unscheduled.length)} еще без времени.</span>`;
+    elements.calendarQueue.appendChild(item);
+  }
+}
+
+function renderLibrary() {
+  if (!elements.libraryList) return;
+  elements.libraryList.innerHTML = "";
+  if (!exportReady()) {
+    elements.libraryList.appendChild(emptyItem("library-item", "Пока нет записи. Нажмите «Демо» или начните capture."));
+    return;
+  }
+
+  const item = document.createElement("article");
+  item.className = "library-item";
+  item.innerHTML = `
+    <strong>${escapeHtml(modeLabel())} · текущая сессия</strong>
+    <span>${state.summary ? "AI Review ready" : state.transcript.trim() ? "Transcript ready" : "Audio saved"} · ${fragmentLabel(state.chunks.length)} · ${wordCount(state.transcript)} слов</span>
+    <div class="pill-row">
+      <span class="pill good">${escapeHtml(selectedModel().shortTitle)}</span>
+      <span class="pill">${taskLabel(state.actions.length)}</span>
+      <span class="pill">${state.markers.length} меток</span>
+    </div>
+  `;
+  elements.libraryList.appendChild(item);
+
+  for (const marker of state.markers.slice(0, 4)) {
+    const markerItem = document.createElement("article");
+    markerItem.className = "library-item";
+    markerItem.innerHTML = `<strong>${escapeHtml(marker.label)}</strong><span>важный момент · ${formatDuration(marker.offsetMs)}</span>`;
+    elements.libraryList.appendChild(markerItem);
+  }
+}
+
+function renderEvidence() {
+  if (!elements.evidenceList) return;
+  elements.evidenceList.innerHTML = "";
+  const sources = [
+    ...state.decisions.map((text, index) => ({ kind: "decision", text, at: index + 1 })),
+    ...state.risks.map((text, index) => ({ kind: "risk", text, at: index + 1 })),
+    ...state.actions.map((task, index) => ({ kind: "task", text: task.source, at: index + 1 })),
+  ].slice(0, 7);
+
+  if (!sources.length) {
+    elements.evidenceList.appendChild(emptyItem("evidence-item", "Evidence появится после AI Review."));
+    return;
+  }
+
+  for (const source of sources) {
+    const item = document.createElement("article");
+    item.className = "evidence-item";
+    item.innerHTML = `
+      <strong>${escapeHtml(source.kind)} · T+${String(source.at).padStart(2, "0")}:00</strong>
+      <span>${escapeHtml(source.text)}</span>
+    `;
+    elements.evidenceList.appendChild(item);
+  }
+}
+
+function renderMindMap() {
+  if (!elements.mindMap) return;
+  elements.mindMap.innerHTML = "";
+  if (!state.summary) {
+    elements.mindMap.appendChild(emptyItem("mind-node", "Mind map появится после AI Review."));
+    return;
+  }
+
+  const nodes = [
+    ["root", modeLabel()],
+    ["", state.decisions[0] || "Решения не найдены"],
+    ["", state.risks[0] || "Риски не найдены"],
+    ["", state.actions[0]?.title || "Задачи не найдены"],
+  ];
+  for (const [tone, text] of nodes) {
+    const node = document.createElement("div");
+    node.className = `mind-node${tone ? ` ${tone}` : ""}`;
+    node.textContent = text;
+    elements.mindMap.appendChild(node);
+  }
+}
+
+function renderPeople() {
+  if (!elements.peopleList) return;
+  elements.peopleList.innerHTML = "";
+  const people = inferPeople();
+  if (!people.length) {
+    elements.peopleList.appendChild(emptyItem("person-card", "Спикеры появятся после diarization/runtime. Preview показывает ручную модель будущей people library."));
+    return;
+  }
+  for (const person of people) {
+    const item = document.createElement("article");
+    item.className = "person-card";
+    item.innerHTML = `
+      <strong>${escapeHtml(person.name)}</strong>
+      <span>${escapeHtml(person.role)} · ${person.count} упоминаний · можно связать с задачами и встречами</span>
+    `;
+    elements.peopleList.appendChild(item);
+  }
+}
+
 function renderList(list, items, emptyText) {
   list.innerHTML = "";
   const source = items.length ? items : [emptyText];
@@ -483,7 +700,12 @@ function renderTasks() {
       <input type="checkbox" ${task.done ? "checked" : ""} aria-label="Готово">
       <div>
         <strong>${escapeHtml(task.title)}</strong>
-        <p>${escapeHtml(task.source)}</p>
+        <p>${escapeHtml(task.evidence || task.source)}</p>
+        <div class="task-footer">
+          <span class="pill ${task.calendarState ? "good" : "warn"}">${task.calendarState ? "в календаре" : "без времени"}</span>
+          <span class="pill">${escapeHtml(task.owner || "owner: not stated")}</span>
+          <button class="button ghost" type="button" data-schedule="${index}">${task.calendarState ? "Переназначить" : "В календарь"}</button>
+        </div>
       </div>
       <span class="task-priority">${escapeHtml(task.priority)}</span>
     `;
@@ -492,8 +714,16 @@ function renderTasks() {
       persist();
       render();
     });
+    item.querySelector("[data-schedule]").addEventListener("click", () => scheduleTask(index));
     elements.taskList.appendChild(item);
   });
+}
+
+function emptyItem(className, text) {
+  const item = document.createElement("article");
+  item.className = `${className} empty`;
+  item.textContent = text;
+  return item;
 }
 
 async function startRecording() {
@@ -796,9 +1026,19 @@ function extractActions(sentences) {
     id: crypto.randomUUID(),
     title: actionTitle(sentence),
     source: sentence,
+    evidence: `T+${String(index + 1).padStart(2, "0")}:00 · ${sentence}`,
+    owner: inferOwner(sentence),
+    calendarState: "",
     priority: index === 0 ? "Важно" : "Обычно",
     done: false,
   }));
+}
+
+function inferOwner(sentence) {
+  if (/сергей/i.test(sentence)) return "Сергей";
+  if (/user|пользователь/i.test(sentence)) return "Пользователь";
+  if (/we|мы|договорились/i.test(sentence)) return "Команда";
+  return "Not stated";
 }
 
 function actionTitle(sentence) {
@@ -812,7 +1052,7 @@ function actionTitle(sentence) {
     .replace(/^(надо|нужно|давай|please|we need to|need to)\s+/i, "")
     .trim();
   const titled = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-  return titled.length > 72 ? `${titled.slice(0, 69)}...` : titled;
+  return titled.length > 118 ? `${titled.slice(0, 115)}...` : titled;
 }
 
 function fillSampleText() {
@@ -825,7 +1065,7 @@ function fillSampleText() {
 function runDemo() {
   state.sessionId = crypto.randomUUID();
   state.mode = "Meeting";
-  state.selectedModel = "whisper_cpp_base";
+  state.selectedModel = "whisper_cpp_small";
   state.chunkWindowSec = 5;
   state.chunks = [
     demoChunk(0, 154_624, 5_000),
@@ -915,17 +1155,33 @@ function toggleBrowserSpeech() {
 }
 
 function addManualTask() {
-  const title = prompt("Новая задача");
-  if (!title?.trim()) return;
+  const nextNumber = state.actions.length + 1;
   state.actions.unshift({
     id: crypto.randomUUID(),
-    title: title.trim(),
+    title: `Ручная задача ${nextNumber}`,
     source: "Вручную",
+    evidence: "Manual task · user-created",
+    owner: "Not stated",
+    calendarState: "",
     priority: "Обычно",
     done: false,
   });
   persist();
   render();
+}
+
+function scheduleTask(index) {
+  const task = state.actions[index];
+  if (!task) return;
+  task.calendarState = task.calendarState ? nextSuggestedSlot(index + 1) : nextSuggestedSlot(index);
+  persist();
+  setStatus("ready", "Задача поставлена");
+  render();
+}
+
+function nextSuggestedSlot(index) {
+  const hour = Math.min(18, 15 + index);
+  return `Сегодня ${String(hour).padStart(2, "0")}:00`;
 }
 
 function exportJSON() {
@@ -1034,6 +1290,7 @@ async function recoverSession() {
 function switchTab(tab) {
   state.activeTab = tab;
   $$(".tab-panel").forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === tab));
+  $$(".nav-item[data-tab]").forEach((button) => button.classList.toggle("active", button.dataset.tab === tab));
   persist();
   render();
 }
@@ -1042,12 +1299,75 @@ function selectedModel() {
   return modelCatalog.find((model) => model.id === state.selectedModel) || modelCatalog[0];
 }
 
+function scheduledTaskCount() {
+  return state.actions.filter((task) => Boolean(task.calendarState)).length;
+}
+
+function inferPeople() {
+  const text = state.transcript.toLowerCase();
+  const people = [];
+  if (/сергей/.test(text)) people.push({ name: "Сергей", role: "product owner", count: countMatches(text, /сергей/g) });
+  if (/клиент|client/.test(text)) people.push({ name: "Клиент", role: "external stakeholder", count: countMatches(text, /клиент|client/g) });
+  if (/команд|team|мы /.test(text)) people.push({ name: "Команда", role: "internal team", count: countMatches(text, /команд|team|мы /g) });
+  return people;
+}
+
+function countMatches(text, pattern) {
+  return [...text.matchAll(pattern)].length;
+}
+
+function runAsk() {
+  const question = elements.askInput.value.trim();
+  state.askQuestion = question;
+  if (!question) {
+    state.askAnswer = "Напишите вопрос по текущей записи, сегодняшнему дню или всей памяти.";
+    persist();
+    render();
+    return;
+  }
+
+  const scopeLabel = {
+    recording: "эта запись",
+    today: "сегодня",
+    client: "клиент/проект",
+    history: "вся память",
+  }[state.askScope] || state.askScope;
+
+  const answer = [];
+  answer.push(`Scope: ${scopeLabel}`);
+  if (!state.transcript.trim()) {
+    answer.push("Я не нашел transcript. Запустите демо, вставьте текст или сделайте запись.");
+  } else if (/реш|decision|decid/i.test(question)) {
+    answer.push(state.decisions.length ? `Решения:\n${listOrEmpty(state.decisions).join("\n")}` : "Я не нашел явных решений в transcript.");
+  } else if (/риск|risk|block/i.test(question)) {
+    answer.push(state.risks.length ? `Риски:\n${listOrEmpty(state.risks).join("\n")}` : "Я не нашел явных рисков в transcript.");
+  } else if (/зада|действ|следующ|action|todo|next|делать/i.test(question)) {
+    answer.push(state.actions.length ? `Следующие действия:\n${state.actions.map((task) => `- ${task.title} · ${task.calendarState || "без времени"}`).join("\n")}` : "Я не нашел задач. Попробуйте сделать AI Review.");
+  } else {
+    answer.push(state.summary || buildSummary(splitSentences(state.transcript), state.transcript));
+  }
+  answer.push("");
+  answer.push("Evidence:");
+  answer.push(...listOrEmpty([
+    state.actions[0]?.evidence,
+    state.decisions[0],
+    state.risks[0],
+  ].filter(Boolean)));
+
+  state.askAnswer = answer.join("\n");
+  persist();
+  render();
+}
+
 function modeLabel() {
   return {
     Meeting: "Встреча",
+    Discovery: "Discovery",
     Thought: "Мысль",
     Dictation: "Диктовка",
     Interview: "Интервью",
+    Lecture: "Лекция",
+    Daily: "Daily memory",
   }[state.mode] || state.mode;
 }
 
@@ -1097,6 +1417,16 @@ elements.pipeline.addEventListener("click", (event) => {
   if (step) switchTab(step.dataset.tab);
 });
 elements.pipelineExport.addEventListener("click", () => switchTab("export"));
+if (elements.navList) {
+  elements.navList.addEventListener("click", (event) => {
+    const button = event.target.closest(".nav-item[data-tab]");
+    if (button) switchTab(button.dataset.tab);
+  });
+}
+document.addEventListener("click", (event) => {
+  const jump = event.target.closest("[data-tab-jump]");
+  if (jump) switchTab(jump.dataset.tabJump);
+});
 elements.modeGrid.addEventListener("click", (event) => {
   const button = event.target.closest(".mode-row");
   if (!button) return;
@@ -1111,6 +1441,18 @@ elements.modelSelect.addEventListener("change", () => {
 });
 elements.demoBtn.addEventListener("click", runDemo);
 elements.exportBtn.addEventListener("click", exportJSON);
+if (elements.startTodayBtn) {
+  elements.startTodayBtn.addEventListener("click", () => {
+    switchTab("recorder");
+    startRecording().catch((error) => {
+      console.error(error);
+      alert(error.message || String(error));
+      setStatus("idle");
+    });
+  });
+}
+if (elements.openTranscriptBtn) elements.openTranscriptBtn.addEventListener("click", () => switchTab("transcript"));
+if (elements.openReviewBtn) elements.openReviewBtn.addEventListener("click", () => switchTab("summary"));
 elements.recordBtn.addEventListener("click", () => {
   startRecording().catch((error) => {
     console.error(error);
@@ -1138,6 +1480,33 @@ if (elements.copyPackageBtn) {
 if (elements.downloadMarkdownBtn) {
   elements.downloadMarkdownBtn.addEventListener("click", exportMarkdown);
 }
+if (elements.askScopeList) {
+  elements.askScopeList.addEventListener("click", (event) => {
+    const button = event.target.closest(".scope-chip[data-scope]");
+    if (!button) return;
+    state.askScope = button.dataset.scope;
+    persist();
+    render();
+  });
+}
+if (elements.askInput) {
+  elements.askInput.addEventListener("input", () => {
+    state.askQuestion = elements.askInput.value;
+    persist();
+  });
+}
+if (elements.askRunBtn) elements.askRunBtn.addEventListener("click", runAsk);
+if (elements.globalSearch) {
+  elements.globalSearch.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    state.askQuestion = elements.globalSearch.value.trim();
+    if (state.askQuestion) {
+      switchTab("ask");
+      elements.askInput.value = state.askQuestion;
+      runAsk();
+    }
+  });
+}
 elements.chunkWindowSelect.addEventListener("change", () => {
   state.chunkWindowSec = Number(elements.chunkWindowSelect.value);
   persist();
@@ -1150,7 +1519,7 @@ elements.transcriptInput.addEventListener("input", () => {
 });
 
 hydrate();
-if (!["recorder", "transcript", "summary", "tasks", "export"].includes(state.activeTab)) state.activeTab = "recorder";
+if (!["today", "recorder", "library", "transcript", "summary", "tasks", "ask", "people", "models", "settings", "export"].includes(state.activeTab)) state.activeTab = "today";
 setStatus(state.status === "crashed" || state.status === "recoverable" ? state.status : "ready");
 switchTab(state.activeTab);
 drawIdleWaveform();

@@ -36,13 +36,21 @@ The setup script installs:
 
 ## First Model Choice
 
-Use `Whisper.cpp Base`.
+Current native bootstrap: use `Whisper.cpp Base`.
 
 It is the best first Intel test profile because it is free, offline, multilingual, small enough for CPU testing, and good enough for Russian/English dictation experiments. `tiny` is faster but noticeably weaker; `small` is a better later quality target after latency and packaging are stable.
 
+Current web product preview: `Whisper.cpp Small` is shown as the recommended
+Intel UX target because it is the better product-quality default once the native
+model manager supports multiple downloads. Until `scripts/setup-whisper-intel.sh`
+adds model selection, the native Intel runtime still expects `ggml-base.bin`.
+
 ## Run the Web Workbench
 
-This gives an immediate UI preview with microphone capture, chunks, markers, recovery journal, model selection, transcript processing and local rule-based summary/actions:
+This gives an immediate UI preview with microphone capture, chunks, markers,
+recovery journal, model selection, Today/Capture/Library navigation, transcript
+processing, local rule-based AI Review/actions, evidence chips, Ask preview and
+calendar task scheduling:
 
 ```bash
 cd /Users/erdc/Documents/SuperDictate

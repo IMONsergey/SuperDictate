@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>SuperDictate Workbench</title>
-    <link rel="stylesheet" href="./styles.css?v=20260730-5">
+    <link rel="stylesheet" href="./styles.css?v=20260730-8">
   </head>
   <body>
     <main class="app-shell">
@@ -19,9 +19,14 @@
           <img class="brand-mark" src="../icon/parakey-512.png" alt="">
           <div>
             <h1>SuperDictate</h1>
-            <p id="runtimeLine">Локальная диктовка · Intel preview</p>
+            <p id="runtimeLine">Conversation memory OS · Intel local preview</p>
           </div>
         </div>
+
+        <label class="command-search">
+          <span>Поиск</span>
+          <input id="globalSearch" type="search" placeholder="Найти запись, задачу, человека">
+        </label>
 
         <div class="topbar-actions">
           <label class="select-wrap">
@@ -37,39 +42,88 @@
         </div>
       </header>
 
-      <section class="workflow-strip" id="pipeline" aria-label="Рабочий процесс">
+      <section class="workflow-strip" id="pipeline" aria-label="Состояние обработки">
         <button class="pipeline-step active" data-tab="recorder" type="button">
           <span>1</span>
-          <strong>Запись</strong>
+          <strong>Capture</strong>
           <em id="stepRecord">микрофон готов</em>
         </button>
         <button class="pipeline-step" data-tab="transcript" type="button">
           <span>2</span>
-          <strong>Текст</strong>
+          <strong>Transcript</strong>
           <em id="stepTranscript">текст пуст</em>
         </button>
         <button class="pipeline-step" data-tab="summary" type="button">
           <span>3</span>
-          <strong>Выжимка</strong>
-          <em id="stepSummary">не создана</em>
+          <strong>AI Review</strong>
+          <em id="stepSummary">не создан</em>
         </button>
         <button class="pipeline-step" data-tab="tasks" type="button">
           <span>4</span>
-          <strong>Задачи</strong>
+          <strong>Tasks</strong>
           <em id="stepTasks">0 задач</em>
         </button>
         <button class="pipeline-step" data-tab="export" id="pipelineExport" type="button">
           <span>5</span>
-          <strong>Экспорт</strong>
-          <em id="stepExport">готовится</em>
+          <strong>Export</strong>
+          <em id="stepExport">нет данных</em>
         </button>
       </section>
 
       <section class="workspace">
-        <aside class="leftbar" aria-label="Навигация и сессия">
+        <aside class="leftbar" aria-label="Навигация и контекст">
+          <section class="panel nav-panel">
+            <div class="panel-title">
+              <span>Рабочая зона</span>
+              <strong>app-only Pocket</strong>
+            </div>
+            <nav class="nav-list" id="navList" aria-label="Основная навигация">
+              <button class="nav-item active" data-tab="today" type="button">
+                <span>Today</span>
+                <strong>Очередь и действия</strong>
+              </button>
+              <button class="nav-item" data-tab="recorder" type="button">
+                <span>Capture</span>
+                <strong>Записать разговор</strong>
+              </button>
+              <button class="nav-item" data-tab="library" type="button">
+                <span>Library</span>
+                <strong>Память и поиск</strong>
+              </button>
+              <button class="nav-item" data-tab="transcript" type="button">
+                <span>Transcript</span>
+                <strong>Текст и правки</strong>
+              </button>
+              <button class="nav-item" data-tab="summary" type="button">
+                <span>AI Review</span>
+                <strong>Выжимка и карта</strong>
+              </button>
+              <button class="nav-item" data-tab="tasks" type="button">
+                <span>Tasks</span>
+                <strong>Календарь и follow-up</strong>
+              </button>
+              <button class="nav-item" data-tab="ask" type="button">
+                <span>Ask</span>
+                <strong>Спросить память</strong>
+              </button>
+              <button class="nav-item" data-tab="people" type="button">
+                <span>People</span>
+                <strong>Спикеры и клиенты</strong>
+              </button>
+              <button class="nav-item" data-tab="models" type="button">
+                <span>Models</span>
+                <strong>Локальные AI модели</strong>
+              </button>
+              <button class="nav-item" data-tab="settings" type="button">
+                <span>Settings</span>
+                <strong>Приватность и storage</strong>
+              </button>
+            </nav>
+          </section>
+
           <section class="panel mode-panel">
             <div class="panel-title">
-              <span>Режим</span>
+              <span>Lens</span>
               <strong id="activeModeLabel">Диктовка</strong>
             </div>
             <div class="mode-list" id="modeGrid">
@@ -77,17 +131,25 @@
                 <strong>Встреча</strong>
                 <span>решения, риски, задачи</span>
               </button>
-              <button class="mode-row" data-mode="Thought" type="button">
-                <strong>Мысль</strong>
-                <span>быстрый черновик</span>
-              </button>
-              <button class="mode-row active" data-mode="Dictation" type="button">
-                <strong>Диктовка</strong>
-                <span>чистый текст</span>
+              <button class="mode-row" data-mode="Discovery" type="button">
+                <strong>Discovery</strong>
+                <span>клиент, боли, next steps</span>
               </button>
               <button class="mode-row" data-mode="Interview" type="button">
                 <strong>Интервью</strong>
-                <span>цитаты и факты</span>
+                <span>вопросы, цитаты, факты</span>
+              </button>
+              <button class="mode-row" data-mode="Lecture" type="button">
+                <strong>Лекция</strong>
+                <span>темы, тезисы, карта</span>
+              </button>
+              <button class="mode-row active" data-mode="Dictation" type="button">
+                <strong>Диктовка</strong>
+                <span>чистый текст куда угодно</span>
+              </button>
+              <button class="mode-row" data-mode="Daily" type="button">
+                <strong>Daily memory</strong>
+                <span>день, люди, обещания</span>
               </button>
             </div>
           </section>
@@ -111,28 +173,79 @@
                 <strong id="byteCount">0 KB</strong>
               </div>
               <div class="metric-row">
-                <span>Защита</span>
+                <span>Recovery</span>
                 <strong id="recoveryState">Чисто</strong>
               </div>
             </div>
           </section>
-
-          <section class="panel">
-            <div class="panel-title">
-              <span>Метки</span>
-              <strong id="markerTitle">нет</strong>
-            </div>
-            <div class="marker-list" id="markerList">Пока пусто</div>
-          </section>
         </aside>
 
         <section class="main-column" aria-label="Рабочая область">
-          <section class="tab-panel active" data-panel="recorder">
+          <section class="tab-panel active" data-panel="today">
+            <div class="today-hero">
+              <div>
+                <div class="eyebrow">Local-first · app-only Pocket alternative</div>
+                <h2>Запиши разговор. Получи память, задачи и следующий шаг.</h2>
+                <p>
+                  Первый экран теперь ведет по реальному циклу: capture, transcript,
+                  AI review, tasks, calendar, Ask и export. Запись остается локальной,
+                  модель выбрана явно.
+                </p>
+              </div>
+              <div class="today-actions">
+                <button class="control primary" id="startTodayBtn" type="button">Начать запись</button>
+                <button class="button ghost" id="openTranscriptBtn" type="button">Вставить текст</button>
+                <button class="button ghost" id="openReviewBtn" type="button">Открыть review</button>
+              </div>
+            </div>
+
+            <div class="today-grid">
+              <article class="work-card primary-work">
+                <div class="card-kicker">Сейчас</div>
+                <h3>Intel test model</h3>
+                <p id="modelRecommendation">Whisper.cpp Small выбран как лучший тестовый баланс качества и скорости на Intel Mac.</p>
+                <div class="pill-row">
+                  <span class="pill good">offline</span>
+                  <span class="pill">free OSS</span>
+                  <span class="pill">RU/EN</span>
+                </div>
+              </article>
+              <article class="work-card">
+                <div class="card-kicker">Очередь</div>
+                <h3 id="sourceCard">микрофон или текстовый ввод</h3>
+                <p>Запись сохраняется частями в IndexedDB preview, native runtime закрепит CAF chunk package.</p>
+              </article>
+              <article class="work-card">
+                <div class="card-kicker">Follow-through</div>
+                <h3 id="taskStatus">Задачи появятся после выжимки.</h3>
+                <p>Каждая задача должна иметь evidence и кнопку календаря.</p>
+              </article>
+            </div>
+
+            <div class="section-grid two">
+              <section class="result-block">
+                <div class="block-head">
+                  <h3>Processing state</h3>
+                  <span id="packageCard">0 фрагментов · чисто</span>
+                </div>
+                <div class="state-list" id="processingStateList"></div>
+              </section>
+              <section class="result-block">
+                <div class="block-head">
+                  <h3>Calendar queue</h3>
+                  <span>Day One rule</span>
+                </div>
+                <div class="calendar-list" id="calendarQueue"></div>
+              </section>
+            </div>
+          </section>
+
+          <section class="tab-panel" data-panel="recorder">
             <div class="hero-grid">
               <div class="hero-copy">
-                <div class="eyebrow">Локально · Intel preview</div>
-                <h2>Новая запись</h2>
-                <p id="recorderSubtitle">Whisper.cpp Base · микрофон готов · локальное сохранение включено</p>
+                <div class="eyebrow">Capture</div>
+                <h2>Одна кнопка для разговора, мысли или встречи</h2>
+                <p id="recorderSubtitle">Whisper.cpp Small · микрофон готов · локальное сохранение включено</p>
               </div>
               <div class="timer-card">
                 <span class="badge" id="recordingBadge">Готово</span>
@@ -170,35 +283,44 @@
               <button class="control danger" id="stopBtn" type="button" disabled>Стоп</button>
             </div>
 
-            <div class="feature-grid">
-              <article class="feature-card">
-                <strong>Источник</strong>
-                <span id="sourceCard">микрофон или текстовый ввод</span>
-              </article>
-              <article class="feature-card">
-                <strong>Модель</strong>
-                <span id="modelCard">Whisper.cpp Base выбрана</span>
-              </article>
-              <article class="feature-card">
-                <strong>Пакет</strong>
-                <span id="packageCard">0 фрагментов · чисто</span>
-              </article>
+            <div class="spoken-labels">
+              <span>Говорите вслух:</span>
+              <strong>Решение:</strong>
+              <strong>Action item:</strong>
+              <strong>Риск:</strong>
+              <strong>Вопрос:</strong>
             </div>
+          </section>
+
+          <section class="tab-panel" data-panel="library">
+            <div class="screen-header">
+              <div>
+                <div class="eyebrow">Library</div>
+                <h2>Память по дням, людям и проектам</h2>
+                <p>Preview показывает текущую сессию и то, как будет выглядеть будущая searchable library.</p>
+              </div>
+              <div class="button-row">
+                <button class="button ghost" type="button" data-tab-jump="ask">Спросить</button>
+                <button class="button ghost" type="button" data-tab-jump="export">Экспорт</button>
+              </div>
+            </div>
+            <div class="library-list" id="libraryList"></div>
           </section>
 
           <section class="tab-panel" data-panel="transcript">
             <div class="screen-header">
               <div>
-                <h2>Транскрипт</h2>
+                <div class="eyebrow">Transcript</div>
+                <h2>Текст, raw notes и ручная коррекция</h2>
                 <p id="transcriptStatus">Добавьте текст вручную, включите браузерную речь или демо.</p>
               </div>
               <div class="button-row">
                 <button class="button ghost" id="browserSpeechBtn" type="button">Браузерная речь</button>
                 <button class="button ghost" id="sampleTextBtn" type="button">Пример</button>
-                <button class="button primary-text" id="processTextBtn" type="button">Сделать выжимку</button>
+                <button class="button primary-text" id="processTextBtn" type="button">Сделать AI Review</button>
               </div>
             </div>
-            <textarea id="transcriptInput" spellcheck="true" placeholder="Вставьте речь, заметку или протокол встречи. После этого нажмите «Сделать выжимку»."></textarea>
+            <textarea id="transcriptInput" spellcheck="true" placeholder="Вставьте речь, заметку или протокол встречи. После этого нажмите «Сделать AI Review»."></textarea>
             <div class="inline-actions">
               <button class="button ghost" id="clearTextBtn" type="button">Очистить</button>
               <button class="button ghost" id="copyTranscriptBtn" type="button">Копировать текст</button>
@@ -208,7 +330,8 @@
           <section class="tab-panel" data-panel="summary">
             <div class="screen-header">
               <div>
-                <h2>AI Review</h2>
+                <div class="eyebrow">AI Review</div>
+                <h2>Выжимка с evidence, рисками и mind map</h2>
                 <p id="summaryStatus">Выжимка, решения и риски остаются локальным preview-результатом.</p>
               </div>
               <div class="button-row">
@@ -218,7 +341,10 @@
             </div>
             <div class="summary-layout">
               <section class="result-block summary-main">
-                <h3>Выжимка</h3>
+                <div class="block-head">
+                  <h3>Выжимка</h3>
+                  <span id="modelCard">Whisper.cpp Small выбрана</span>
+                </div>
                 <p id="summaryText">Пока нет выжимки.</p>
               </section>
               <section class="result-block">
@@ -233,14 +359,22 @@
                   <li>Пока нет рисков.</li>
                 </ul>
               </section>
+              <section class="result-block">
+                <div class="block-head">
+                  <h3>Mind map</h3>
+                  <span>preview</span>
+                </div>
+                <div class="mind-map" id="mindMap"></div>
+              </section>
             </div>
           </section>
 
           <section class="tab-panel" data-panel="tasks">
             <div class="screen-header">
               <div>
-                <h2>Задачи</h2>
-                <p id="taskStatus">Отметьте готовое и экспортируйте результат.</p>
+                <div class="eyebrow">Tasks</div>
+                <h2>Действия, календарь и follow-up</h2>
+                <p>Задача без evidence и времени не считается закрытой.</p>
               </div>
               <div class="button-row">
                 <button class="button ghost" id="addTaskBtn" type="button">Добавить</button>
@@ -250,11 +384,98 @@
             <div class="task-list" id="taskList"></div>
           </section>
 
+          <section class="tab-panel" data-panel="ask">
+            <div class="screen-header">
+              <div>
+                <div class="eyebrow">Ask</div>
+                <h2>Спросить запись или всю память</h2>
+                <p>Preview отвечает локально по текущему transcript/actions. Runtime позже подключит semantic index.</p>
+              </div>
+            </div>
+            <div class="ask-panel">
+              <div class="scope-list" id="askScopeList">
+                <button class="scope-chip active" data-scope="recording" type="button">Эта запись</button>
+                <button class="scope-chip" data-scope="today" type="button">Сегодня</button>
+                <button class="scope-chip" data-scope="client" type="button">Клиент/проект</button>
+                <button class="scope-chip" data-scope="history" type="button">Вся память</button>
+              </div>
+              <textarea id="askInput" rows="3" placeholder="Например: что мы решили, какие риски, что нужно сделать дальше?"></textarea>
+              <div class="inline-actions">
+                <button class="button primary-text" id="askRunBtn" type="button">Спросить</button>
+                <button class="button ghost" type="button" data-tab-jump="summary">Открыть AI Review</button>
+              </div>
+              <div class="ask-answer" id="askAnswer">Задайте вопрос после демо или вставки transcript.</div>
+            </div>
+          </section>
+
+          <section class="tab-panel" data-panel="people">
+            <div class="screen-header">
+              <div>
+                <div class="eyebrow">People</div>
+                <h2>Спикеры, клиенты и повторяющиеся обещания</h2>
+                <p>Speaker management начинается с именования неизвестных голосов и evidence-backed истории.</p>
+              </div>
+            </div>
+            <div class="people-list" id="peopleList"></div>
+          </section>
+
+          <section class="tab-panel" data-panel="models">
+            <div class="screen-header">
+              <div>
+                <div class="eyebrow">Models</div>
+                <h2>Локальные AI модели без сюрпризов</h2>
+                <p>Пользователь всегда видит модель, размер, приватность, статус и может выбрать другой вариант.</p>
+              </div>
+            </div>
+            <div class="model-list model-list-wide" id="modelList"></div>
+          </section>
+
+          <section class="tab-panel" data-panel="settings">
+            <div class="screen-header">
+              <div>
+                <div class="eyebrow">Settings</div>
+                <h2>Приватность, storage и горячие клавиши</h2>
+                <p>Настройки preview работают как продуктовый скелет; native runtime подключит реальные адаптеры.</p>
+              </div>
+            </div>
+            <div class="settings-grid">
+              <label class="setting-row">
+                <span>
+                  <strong>Local-first capture</strong>
+                  <em>Запись сохраняется перед любой обработкой.</em>
+                </span>
+                <input type="checkbox" checked>
+              </label>
+              <label class="setting-row">
+                <span>
+                  <strong>No surprise cloud</strong>
+                  <em>Cloud processing только после явного opt-in.</em>
+                </span>
+                <input type="checkbox" checked>
+              </label>
+              <label class="setting-row">
+                <span>
+                  <strong>Consent reminder</strong>
+                  <em>Показывать подсказку перед встречей.</em>
+                </span>
+                <input type="checkbox" checked>
+              </label>
+              <label class="setting-row">
+                <span>
+                  <strong>Global hotkey</strong>
+                  <em>Native adapter: пока runtime-unavailable.</em>
+                </span>
+                <input type="checkbox" disabled>
+              </label>
+            </div>
+          </section>
+
           <section class="tab-panel" data-panel="export">
             <div class="screen-header">
               <div>
-                <h2>Экспорт</h2>
-                <p>Соберите результат в текст, Markdown или JSON для дальнейшей работы.</p>
+                <div class="eyebrow">Export</div>
+                <h2>Пакет, Markdown и JSON</h2>
+                <p>Соберите результат в формат для Notion, письма, CRM или локального архива.</p>
               </div>
               <div class="button-row">
                 <button class="button ghost" id="copyPackageBtn" type="button">Копировать пакет</button>
@@ -266,12 +487,23 @@
         </section>
 
         <aside class="rightbar" aria-label="Инспектор">
-          <section class="panel model-panel">
+          <section class="panel inspector-panel">
             <div class="panel-title">
               <span>Активная модель</span>
-              <strong id="selectedModelLabel">Whisper.cpp Base</strong>
+              <strong id="selectedModelLabel">Whisper.cpp Small</strong>
             </div>
-            <div class="model-list" id="modelList"></div>
+            <div class="inspector-summary">
+              <strong>Локальный режим</strong>
+              <span>Intel preview · бесплатная open-source модель · без cloud opt-in.</span>
+            </div>
+          </section>
+
+          <section class="panel evidence-panel">
+            <div class="panel-title">
+              <span>Evidence</span>
+              <strong>source links</strong>
+            </div>
+            <div class="evidence-list" id="evidenceList"></div>
           </section>
 
           <section class="panel chunks-panel">
@@ -282,6 +514,14 @@
             <div class="chunk-list" id="chunkList">Нет фрагментов</div>
           </section>
 
+          <section class="panel markers-panel">
+            <div class="panel-title">
+              <span>Метки</span>
+              <strong id="markerTitle">нет</strong>
+            </div>
+            <div class="marker-list" id="markerList">Пусто</div>
+          </section>
+
           <section class="panel recovery-panel">
             <div class="panel-title">
               <span>Recovery</span>
@@ -289,7 +529,7 @@
             </div>
             <div class="recovery-summary">
               <strong>Запись защищена локально</strong>
-              <span>Фрагменты проверяются checksum, детали доступны ниже.</span>
+              <span>Фрагменты проверяются checksum, детали доступны в техническом disclosure.</span>
             </div>
             <details>
               <summary>Технические детали</summary>
@@ -303,6 +543,6 @@
         </aside>
       </section>
     </main>
-    <script src="./app.js?v=20260730-5"></script>
+    <script src="./app.js?v=20260730-8"></script>
   </body>
 </html>
