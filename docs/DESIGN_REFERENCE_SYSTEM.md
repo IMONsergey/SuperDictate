@@ -1,62 +1,157 @@
 # SuperDictate Design Reference System
 
-Status: active working brief for the macOS workbench and web preview.
+Status: active design contract for the macOS workbench, native clients, and web
+preview.
 
-## Primary Sources
+Last source review: 2026-07-30.
 
-- Apple Human Interface Guidelines: https://developer.apple.com/design/human-interface-guidelines/
-- Apple Design Resources: https://developer.apple.com/design/resources/
-- SF Symbols: https://developer.apple.com/sf-symbols/
-- Apple Design videos: https://developer.apple.com/design/
+Detailed research: [NATIVE_DESIGN_RESEARCH.md](NATIVE_DESIGN_RESEARCH.md).
 
-## Open-Source Product References
+## Product Design Verdict
+
+SuperDictate must feel like a real local-first Mac utility, not a web dashboard.
+The product surface is:
+
+Record -> transcribe -> review -> summarize -> extract tasks -> export.
+
+Everything else exists to support that path: model choice, recovery, storage,
+privacy, hotkeys, and advanced inspection.
+
+## Source Of Truth
+
+- Apple Human Interface Guidelines:
+  https://developer.apple.com/design/human-interface-guidelines/
+- Apple Design Resources:
+  https://developer.apple.com/design/resources/
+- Apple Style Guide:
+  https://help.apple.com/applestyleguide/
+- SF Symbols:
+  https://developer.apple.com/sf-symbols/
+
+Use official Apple platform patterns first: toolbar, sidebar, inspector,
+settings, menus, keyboard shortcuts, focus rings, system typography, semantic
+colors, accessibility labels, and adaptive layouts.
+
+## Product References
 
 - CodeEdit: https://github.com/CodeEditApp/CodeEdit
-  - Use for macOS-native workbench structure: toolbar, sidebar, inspector,
-    detail workspace, preferences, command density, and native SwiftUI/AppKit
-    expectations.
-- CotEditor: https://github.com/CotEditor/CotEditor
-  - Use for restraint: standard macOS controls first, low visual noise, clear
-    beginner/advanced balance.
+  - Borrow: Mac-native workbench structure, welcome window thinking, toolbar
+    density, and reusable SwiftUI window packages.
+  - Avoid: building a code-editor-shaped app. SuperDictate is a recorder and
+    transcript workbench.
+- CotEditor: https://github.com/coteditor/CotEditor
+  - Borrow: restraint, text-editor quality, familiar macOS controls, keyboard
+    behavior, localization, and accessibility.
+  - Avoid: burying recording and AI workflow under generic editor chrome.
 - NetNewsWire: https://github.com/Ranchero-Software/NetNewsWire
-  - Use for mature macOS/iOS split views, reading hierarchy, empty states, and
-    long-session comfort.
+  - Borrow: sidebar hierarchy, reading comfort, multi-window Mac behavior, empty
+    states, and keyboard navigation.
+  - Avoid: feed-reader information architecture.
 - IceCubesApp: https://github.com/Dimillian/IceCubesApp
-  - Use for multiplatform SwiftUI navigation, sidebar behavior, drafts,
-    streaming updates, and iOS/macOS adaptation.
+  - Borrow: multiplatform SwiftUI navigation, sidebar adaptation, draft-like
+    persistence, cached state, and live updates.
+  - Avoid: social-client density and feed-first composition.
 - Pindrop: https://github.com/watzon/pindrop
-  - Use as the closest dictation-domain reference: model browser, local-first
-    transcription, privacy posture, hotkeys, and diarization roadmap.
+  - Borrow: local dictation posture, model browser, hotkeys, output modes,
+    transcript history, custom dictionary, and first-run model setup.
+  - Avoid: menu-bar-only product scope. SuperDictate also needs a full workbench.
+
+## Technology References
+
 - Argmax OSS Swift: https://github.com/argmaxinc/argmax-oss-swift
-  - Use for native on-device speech AI direction: WhisperKit, SpeakerKit, TTSKit,
-    and local server patterns.
-- Fluent UI Apple: https://github.com/microsoft/fluentui-apple
-  - Use only for token architecture ideas when building cross-platform native
-    component contracts. Do not visually turn SuperDictate into Fluent.
+  - Borrow for Apple Silicon direction: WhisperKit, SpeakerKit, TTSKit, and
+    local speech AI package boundaries.
+- KeyboardShortcuts: https://github.com/sindresorhus/KeyboardShortcuts
+  - Borrow for user-configurable global shortcuts and settings UI.
+- Sparkle: https://github.com/sparkle-project/Sparkle
+  - Borrow for native update trust, beta channels, and quiet first-launch
+    behavior once distribution begins.
+- Fluent UI Apple tokens:
+  https://github.com/microsoft/fluentui-apple/wiki/Design-Tokens
+  - Borrow only the token hierarchy idea: global tokens, semantic alias tokens,
+    and control tokens. Do not copy Fluent's visual style.
 
-## Design Principles For SuperDictate
+## Non-Negotiable Interface Rules
 
-1. Native first: toolbar, sidebar, inspector, split view, settings, menus, and
-   keyboard shortcuts must feel like a real macOS utility, not a web dashboard.
-2. One primary path: Record -> Text -> AI summary -> Tasks -> Export. Every
-   screen state should make the next action obvious without a tutorial.
-3. Local trust: model, storage, recovery, checksum, and privacy status are
-   visible in the inspector, not hidden in logs.
-4. Progressive depth: normal users see record/text/summary/tasks; advanced users
-   can inspect chunks, model runtime, recovery journal, and export JSON.
-5. Quiet but distinctive: mostly system neutrals, Apple blue for primary action,
-   green for verified/local, amber for caution, red only for destructive states.
-6. No fake affordances: a button must do something; preview-only limitations must
-   be labeled as preview/runtime status rather than disguised as production.
+1. No raw JSON as a primary product surface. Technical data belongs in disclosure
+   sections and inspector details.
+2. No fake controls. Every visible control must either work or be explicitly
+   marked as preview/runtime-unavailable.
+3. No marketing landing page. The first screen is the usable recorder/workbench.
+4. No colored card soup. Use native hierarchy, typography, separators, and
+   system materials before decorative cards.
+5. No hidden model choice. The active model, recommendation, installed state,
+   size, speed, privacy mode, and download state must be visible.
+6. No surprise cloud. Local/open-source/free is default; cloud or paid providers
+   require explicit opt-in and clear copy.
+7. No destructive ambiguity. Delete, crash simulation, model removal, and reset
+   actions must use destructive styling and confirmation where data can be lost.
 
-## Immediate UX Repairs
+## Native Information Architecture
 
-- Replace technical-first labels like `Chunks` and `Recovery Journal` with
-  user-facing labels, while retaining inspectable technical details.
-- Keep the first viewport focused on the recorder controls and current status.
-- Make model choice permanent top-level context, not a hidden setting.
-- Make the demo flow populate transcript, AI summary, decisions, risks, tasks,
-  chunks, and recovery state so the product can be evaluated without microphone
-  permissions.
-- Keep the web preview visually close to the planned macOS workbench so it is
-  useful for product review before native Intel runtime is fully stable.
+### First Launch
+
+- Microphone permission
+- Local model selection and download
+- Optional global hotkey setup
+- Storage location and privacy explanation
+- Start recording
+
+### Main Mac Window
+
+- Sidebar: Recordings, Today, Transcripts, Tasks, Models, Recovery, Settings
+- Toolbar: record, pause, stop, marker, model selector, export, search
+- Center: live transcript/editor, speaker segments, timeline, summary tabs
+- Inspector: active model, local runtime, chunks, recovery state, exports,
+  provenance, technical details
+
+### Menu Bar
+
+- Current recording state
+- Quick record and stop
+- Push-to-talk status
+- Last transcript copy/export actions
+- Open workbench
+
+### Settings
+
+- Models
+- Recording
+- Hotkeys
+- Output and export
+- Local AI cleanup and summaries
+- Storage and recovery
+- Privacy
+- Updates
+
+## Visual System Rules
+
+- Typography: SF Pro/Text for interface and transcript, SF Mono only for
+  timestamps, checksums, logs, and code-like metadata.
+- Spacing: 4 pt rhythm, with 8/12/16/24/32 pt as the common scale.
+- Radius: controls follow platform defaults; custom cards stay at 8 pt or less.
+- Color: system neutrals as the base, Apple blue for primary action, green for
+  verified/local, amber for warning, red for destructive. Do not let the app
+  become one-hue blue, purple, beige, or dark-slate.
+- Icons: SF Symbols or a native icon library only. Use text labels where the
+  action is unfamiliar.
+- Motion: subtle state transitions for recording, processing, and completion.
+  No decorative motion that competes with transcript reading.
+- Density: Mac is information-dense but calm; iPhone/watch surfaces are capture
+  and review only.
+
+## Immediate Repair Backlog
+
+1. Rename technical panels and make the workflow obvious:
+   Recorder, Transcript, AI Review, Tasks, Export, Model, Recovery.
+2. Add a real model manager:
+   Recommended for this Mac, installed, needs download, source, size, speed,
+   accuracy, language support, privacy mode, and actions.
+3. Make demo mode exercise the full product loop:
+   recording state, transcript, summary, decisions, risks, tasks, chunks,
+   recovery, export, and model choice.
+4. Replace recovery JSON-first UI with human recovery states and a technical
+   details disclosure.
+5. Build the native SwiftUI workbench shell from this information architecture.
+6. Keep the web preview aligned with the native workbench until the native Intel
+   build is stable enough for daily testing.
