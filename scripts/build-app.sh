@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUTPUT_APP="${1:-$ROOT_DIR/dist/SuperDictate.app}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+INTEL_PREVIEW="${SUPERDICTATE_ENABLE_INTEL_PREVIEW:-0}"
 
 say() {
     printf 'SuperDictate: %s\n' "$*"
@@ -42,7 +43,10 @@ if running_under_rosetta; then
     say "Restarting the build natively for Apple Silicon..."
     exec /usr/bin/arch -arm64 /bin/bash "$0" "$@"
 fi
-[[ "$(/usr/bin/uname -m)" == "arm64" ]] || fail "An Apple Silicon Mac (M1 or newer) is required."
+if [[ "$(/usr/bin/uname -m)" != "arm64" ]]; then
+    [[ "$INTEL_PREVIEW" == "1" ]] || fail "An Apple Silicon Mac (M1 or newer) is required. For local Intel preview builds, set SUPERDICTATE_ENABLE_INTEL_PREVIEW=1 and use the Whisper.cpp Base speech model."
+    say "Building local Intel preview. Install whisper.cpp first with scripts/setup-whisper-intel.sh and choose Whisper.cpp Base in Settings."
+fi
 validate_output_app_path "$OUTPUT_APP"
 command -v swift >/dev/null 2>&1 || fail "Swift is missing. Run: xcode-select --install"
 command -v codesign >/dev/null 2>&1 || fail "codesign is missing. Run: xcode-select --install"

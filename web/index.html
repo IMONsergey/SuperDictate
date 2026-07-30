@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SuperDictate Workbench</title>
+    <link rel="stylesheet" href="./styles.css?v=20260730-3">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <img class="brand-mark" src="../icon/parakey-512.png" alt="">
+          <div>
+            <h1>SuperDictate</h1>
+          <p id="runtimeLine">Локальная диктовка · Intel preview</p>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <label class="select-wrap">
+            <span>Модель</span>
+            <select id="modelSelect" aria-label="Модель распознавания"></select>
+          </label>
+          <button class="button ghost" id="demoBtn">Демо-проход</button>
+          <button class="button ghost" id="exportBtn">Скачать JSON</button>
+          <span class="runtime-pill">
+            <span class="status-dot" id="runtimeDot"></span>
+            <span id="runtimeStatus">Готово</span>
+          </span>
+        </div>
+      </header>
+
+      <section class="pipeline" id="pipeline">
+        <button class="pipeline-step active" data-tab="recorder">
+          <span>1</span>
+          <strong>Запись</strong>
+          <em id="stepRecord">микрофон готов</em>
+        </button>
+        <button class="pipeline-step" data-tab="transcript">
+          <span>2</span>
+          <strong>Текст</strong>
+          <em id="stepTranscript">текст пуст</em>
+        </button>
+        <button class="pipeline-step" data-tab="summary">
+          <span>3</span>
+          <strong>AI-выжимка</strong>
+          <em id="stepSummary">не создана</em>
+        </button>
+        <button class="pipeline-step" data-tab="tasks">
+          <span>4</span>
+          <strong>Задачи</strong>
+          <em id="stepTasks">0 задач</em>
+        </button>
+        <button class="pipeline-step" id="pipelineExport">
+          <span>5</span>
+          <strong>Экспорт</strong>
+          <em>JSON</em>
+        </button>
+      </section>
+
+      <section class="workspace">
+        <aside class="leftbar">
+          <section class="panel">
+            <div class="panel-title">
+              <span>Режим работы</span>
+              <strong id="activeModeLabel">Диктовка</strong>
+            </div>
+            <div class="mode-list" id="modeGrid">
+              <button class="mode-row" data-mode="Meeting">
+                <strong>Встреча</strong>
+                <span>решения и задачи</span>
+              </button>
+              <button class="mode-row" data-mode="Thought">
+                <strong>Мысль</strong>
+                <span>быстрый черновик</span>
+              </button>
+              <button class="mode-row active" data-mode="Dictation">
+                <strong>Диктовка</strong>
+                <span>текст без лишнего</span>
+              </button>
+              <button class="mode-row" data-mode="Interview">
+                <strong>Интервью</strong>
+                <span>цитаты и факты</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title">
+              <span>Текущая сессия</span>
+              <strong id="sessionState">Готово</strong>
+            </div>
+            <div class="metric-list">
+              <div class="metric-row">
+                <span>Фрагменты</span>
+                <strong id="chunkCount">0</strong>
+              </div>
+              <div class="metric-row">
+                <span>Маркеры</span>
+                <strong id="markerCount">0</strong>
+              </div>
+              <div class="metric-row">
+                <span>Локально</span>
+                <strong id="byteCount">0 KB</strong>
+              </div>
+              <div class="metric-row">
+                <span>Восстановление</span>
+                <strong id="recoveryState">Чисто</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title">
+                <span>Метки</span>
+              <strong id="markerTitle">нет</strong>
+            </div>
+            <div class="marker-list" id="markerList">Пусто</div>
+          </section>
+        </aside>
+
+        <section class="main-column">
+          <section class="tab-panel active" data-panel="recorder">
+            <div class="screen-header">
+              <div>
+                <h2>Запись голоса</h2>
+                <p id="recorderSubtitle">Локальные фрагменты, checksum и восстановление после сбоя.</p>
+              </div>
+              <div class="timer-wrap">
+                <span class="badge" id="recordingBadge">Готово</span>
+                <strong class="timer" id="timer">00:00</strong>
+              </div>
+            </div>
+
+            <div class="waveform-shell">
+              <div class="level-row">
+                <span>Вход</span>
+                <div class="level-track"><span id="levelFill"></span></div>
+              </div>
+              <canvas id="waveCanvas" width="1400" height="420"></canvas>
+              <div class="wave-footer">
+                <span id="waveFooter">Нет аудио</span>
+                <label>
+                  <select id="chunkWindowSelect" aria-label="Длина фрагмента">
+                    <option value="5" selected>5 секунд</option>
+                    <option value="10">10 секунд</option>
+                    <option value="20">20 секунд</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div class="controls">
+              <button class="control primary" id="recordBtn">Записать</button>
+              <button class="control secondary" id="pauseBtn" disabled>Пауза</button>
+              <button class="control tertiary" id="markerBtn" disabled>Метка</button>
+              <button class="control danger" id="stopBtn" disabled>Стоп</button>
+            </div>
+          </section>
+
+          <section class="tab-panel" data-panel="transcript">
+            <div class="screen-header">
+              <div>
+                <h2>Текст</h2>
+                <p id="transcriptStatus">Отредактируйте распознанный текст перед локальной обработкой.</p>
+              </div>
+              <div class="button-row">
+                <button class="button ghost" id="browserSpeechBtn">Браузерная речь</button>
+                <button class="button ghost" id="sampleTextBtn">Пример</button>
+                <button class="button primary-text" id="processTextBtn">Сделать выжимку</button>
+              </div>
+            </div>
+            <textarea id="transcriptInput" spellcheck="true" placeholder="Вставьте заметку, протокол встречи или включите демо-проход."></textarea>
+            <div class="inline-actions">
+              <button class="button ghost" id="clearTextBtn">Очистить</button>
+              <button class="button ghost" id="copyTranscriptBtn">Копировать текст</button>
+            </div>
+          </section>
+
+          <section class="tab-panel" data-panel="summary">
+            <div class="screen-header">
+              <div>
+                <h2>AI-выжимка</h2>
+                <p id="summaryStatus">Кратко, по делу, без отправки текста в облако.</p>
+              </div>
+              <div class="button-row">
+                <button class="button ghost" id="copySummaryBtn">Копировать</button>
+                <button class="button primary-text" id="summaryToTasksBtn">К задачам</button>
+              </div>
+            </div>
+            <div class="result-block">
+              <p id="summaryText">Пока нет выжимки.</p>
+            </div>
+            <div class="result-grid">
+              <section class="result-block">
+                <h3>Решения</h3>
+                <ul id="decisionList">
+                  <li>Пока нет решений.</li>
+                </ul>
+              </section>
+              <section class="result-block">
+                <h3>Риски</h3>
+                <ul id="riskList">
+                  <li>Пока нет рисков.</li>
+                </ul>
+              </section>
+            </div>
+          </section>
+
+          <section class="tab-panel" data-panel="tasks">
+            <div class="screen-header">
+              <div>
+                <h2>Задачи</h2>
+                <p id="taskStatus">Отметьте, что уже сделано, и экспортируйте результат.</p>
+              </div>
+              <div class="button-row">
+                <button class="button ghost" id="addTaskBtn">Добавить</button>
+                <button class="button ghost" id="copyTasksBtn">Копировать</button>
+              </div>
+            </div>
+            <div class="task-list" id="taskList"></div>
+          </section>
+        </section>
+
+        <aside class="rightbar">
+          <section class="panel">
+            <div class="panel-title">
+              <span>Модель</span>
+              <strong id="selectedModelLabel">Whisper.cpp Base</strong>
+            </div>
+            <div class="model-list" id="modelList"></div>
+          </section>
+
+          <section class="panel chunks-panel">
+            <div class="panel-title">
+              <span>Фрагменты</span>
+              <strong id="cafLabel">5 sec</strong>
+            </div>
+            <div class="chunk-list" id="chunkList">Нет фрагментов</div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title">
+              <span>Журнал восстановления</span>
+              <strong id="journalState">Чисто</strong>
+            </div>
+            <pre class="journal" id="journalView">{}</pre>
+            <div class="recovery-actions">
+              <button class="button danger-text" id="crashBtn">Сбой</button>
+              <button class="button ghost" id="recoverBtn">Восстановить</button>
+            </div>
+          </section>
+        </aside>
+      </section>
+    </main>
+    <script src="./app.js?v=20260730-3"></script>
+  </body>
+</html>

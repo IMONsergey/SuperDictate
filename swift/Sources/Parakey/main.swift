@@ -457,6 +457,7 @@ let DICTATION_LANGUAGE_DISPLAY: [DictationLanguage: String] = [
 
 enum SpeechModelProfile: String, CaseIterable {
     case multilingualV3 = "multilingual_v3"
+    case whisperCppBase = "whisper_cpp_base"
     // Deprecated production option. Kept only so old saved preferences
     // can be read and migrated back to the supported v3 model.
     case englishUnified = "english_unified"
@@ -464,7 +465,12 @@ enum SpeechModelProfile: String, CaseIterable {
     static let productionDefault: SpeechModelProfile = .multilingualV3
 
     var isProductionSupported: Bool {
-        self == .multilingualV3
+        switch self {
+        case .multilingualV3, .whisperCppBase:
+            return true
+        case .englishUnified:
+            return false
+        }
     }
 
     var productionProfile: SpeechModelProfile {
@@ -475,6 +481,8 @@ enum SpeechModelProfile: String, CaseIterable {
         switch self {
         case .multilingualV3:
             return "Multilingual (Parakeet TDT v3)"
+        case .whisperCppBase:
+            return "Whisper.cpp Base (Intel preview)"
         case .englishUnified:
             return "English optimized (Parakeet Unified, deprecated)"
         }
@@ -484,6 +492,8 @@ enum SpeechModelProfile: String, CaseIterable {
         switch self {
         case .multilingualV3:
             return "Parakeet TDT v3"
+        case .whisperCppBase:
+            return "Whisper.cpp Base"
         case .englishUnified:
             return "Parakeet Unified"
         }
@@ -493,30 +503,64 @@ enum SpeechModelProfile: String, CaseIterable {
         switch self {
         case .multilingualV3:
             return "FluidAudio · Parakeet TDT v3 multilingual (CoreML / ANE)"
+        case .whisperCppBase:
+            return "whisper.cpp · Whisper Base multilingual (local CPU, Intel preview)"
         case .englishUnified:
             return "FluidAudio · Parakeet Unified English (deprecated)"
         }
     }
 
     var setupReadyDetail: String {
-        "\(shortName) is loaded locally."
+        if requiresExternalWhisperCppRuntime {
+            return "\(shortName) is ready through local whisper.cpp."
+        }
+        return "\(shortName) is loaded locally."
     }
 
     var cacheResetDetail: String {
         switch self {
         case .multilingualV3:
             return "Parakey will delete the local Parakeet TDT v3 model cache, unload the current speech model, and download a fresh verified copy before dictation is available again."
+        case .whisperCppBase:
+            return "Whisper.cpp Base is managed by the local Intel setup script. Re-run scripts/setup-whisper-intel.sh to rebuild the runtime or refresh the model."
         case .englishUnified:
             return "Parakey will delete the local Parakeet TDT v3 model cache, unload the current speech model, and download a fresh verified copy before dictation is available again."
         }
     }
 
     var estimatedDownloadBytes: Int64 {
-        700 * 1024 * 1024
+        switch self {
+        case .multilingualV3, .englishUnified:
+            return 700 * 1024 * 1024
+        case .whisperCppBase:
+            return 150 * 1024 * 1024
+        }
     }
 
     var downloadSizeText: String {
-        "about 500-700 MB"
+        switch self {
+        case .multilingualV3, .englishUnified:
+            return "about 500-700 MB"
+        case .whisperCppBase:
+            return "about 150 MB"
+        }
+    }
+
+    var runtimeModelID: String {
+        switch self {
+        case .multilingualV3, .englishUnified:
+            return "fluidaudio.\(rawValue)"
+        case .whisperCppBase:
+            return "whisper.cpp.base"
+        }
+    }
+
+    var requiresExternalWhisperCppRuntime: Bool {
+        self == .whisperCppBase
+    }
+
+    var supportsAutomaticCacheReset: Bool {
+        !requiresExternalWhisperCppRuntime
     }
 }
 
@@ -1678,8 +1722,45 @@ func speechModelCacheBaseDirectory() -> URL {
     MLModelConfigurationUtils.defaultModelsDirectory()
 }
 
-func speechModelCacheDirectory(for _: SpeechModelProfile) -> URL {
-    AsrModels.defaultCacheDirectory(for: .v3)
+func whisperCppBaseModelDirectory() -> URL {
+    let support = (try? superDictateApplicationSupportDirectory())
+        ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(APP_SUPPORT_DIR_NAME, isDirectory: true)
+    return support
+        .appendingPathComponent("Models", isDirectory: true)
+        .appendingPathComponent("whisper.cpp", isDirectory: true)
+        .appendingPathComponent("base", isDirectory: true)
+}
+
+func whisperCppBaseModelURL() -> URL {
+    if let override = ProcessInfo.processInfo.environment["SUPERDICTATE_WHISPER_CPP_MODEL"],
+       !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        return URL(fileURLWithPath: (override as NSString).expandingTildeInPath)
+    }
+    return whisperCppBaseModelDirectory()
+        .appendingPathComponent("ggml-base.bin", isDirectory: false)
+}
+
+func whisperCppCLIURL() -> URL {
+    if let override = ProcessInfo.processInfo.environment["SUPERDICTATE_WHISPER_CPP_CLI"],
+       !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        return URL(fileURLWithPath: (override as NSString).expandingTildeInPath)
+    }
+    let support = (try? superDictateApplicationSupportDirectory())
+        ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(APP_SUPPORT_DIR_NAME, isDirectory: true)
+    return support
+        .appendingPathComponent("whisper.cpp", isDirectory: true)
+        .appendingPathComponent("whisper-cli", isDirectory: false)
+}
+
+func speechModelCacheDirectory(for profile: SpeechModelProfile) -> URL {
+    switch profile {
+    case .multilingualV3, .englishUnified:
+        return AsrModels.defaultCacheDirectory(for: .v3)
+    case .whisperCppBase:
+        return whisperCppBaseModelDirectory()
+    }
 }
 
 func speechModelDownloadRequiredBytes(for profile: SpeechModelProfile,
@@ -1717,7 +1798,12 @@ func availableImportantDiskSpaceBytes(containing url: URL) -> Int64? {
 }
 
 func speechModelCacheExists(for profile: SpeechModelProfile) -> Bool {
-    FileManager.default.fileExists(atPath: speechModelCacheDirectory(for: profile).path)
+    switch profile {
+    case .multilingualV3, .englishUnified:
+        return FileManager.default.fileExists(atPath: speechModelCacheDirectory(for: profile).path)
+    case .whisperCppBase:
+        return FileManager.default.fileExists(atPath: whisperCppBaseModelURL().path)
+    }
 }
 
 func assertSufficientDiskSpaceForSpeechModelDownload(profile: SpeechModelProfile) throws {
@@ -3348,6 +3434,17 @@ private func speechModelFailureDetail(errorDescription: String) -> String {
 
     if looksLikeDiskSpaceFailure {
         return errorDescription
+    }
+
+    if lower.contains("whisper.cpp")
+        || lower.contains("superdictate_whisper_cpp")
+        || lower.contains("whisper-cli")
+        || lower.contains("ggml-base.bin") {
+        return """
+        \(errorDescription)
+
+        Intel preview uses a local whisper.cpp runtime. Run scripts/setup-whisper-intel.sh from the repository, then retry loading the speech model. Audio stays on this Mac.
+        """
     }
 
     if looksLikeIntegrityFailure {
@@ -5193,6 +5290,227 @@ private final class AudioConverterInputProvider: @unchecked Sendable {
 
 private enum LoadedSpeechEngine {
     case parakeetV3(AsrManager)
+    case whisperCppBase(WhisperCppRuntime)
+}
+
+private enum WhisperCppRuntimeError: LocalizedError {
+    case missingExecutable(URL)
+    case missingModel(URL)
+    case wavWriteFailed(String)
+    case processFailed(exitCode: Int32, detail: String)
+    case emptyOutput(detail: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingExecutable(let url):
+            return """
+            whisper.cpp CLI was not found at \(url.path).
+
+            Run scripts/setup-whisper-intel.sh, or set SUPERDICTATE_WHISPER_CPP_CLI to an executable whisper-cli path.
+            """
+        case .missingModel(let url):
+            return """
+            Whisper.cpp Base model was not found at \(url.path).
+
+            Run scripts/setup-whisper-intel.sh, or set SUPERDICTATE_WHISPER_CPP_MODEL to a ggml-base.bin model file.
+            """
+        case .wavWriteFailed(let detail):
+            return "Could not prepare audio for whisper.cpp: \(detail)"
+        case .processFailed(let exitCode, let detail):
+            return """
+            whisper.cpp failed with exit code \(exitCode).
+
+            \(detail)
+            """
+        case .emptyOutput(let detail):
+            return """
+            whisper.cpp completed but returned no transcript text.
+
+            \(detail)
+            """
+        }
+    }
+}
+
+private extension Data {
+    mutating func appendASCII(_ value: String) {
+        append(Data(value.utf8))
+    }
+
+    mutating func appendLittleEndian<T: FixedWidthInteger>(_ value: T) {
+        var littleEndianValue = value.littleEndian
+        withUnsafeBytes(of: &littleEndianValue) { bytes in
+            append(contentsOf: bytes)
+        }
+    }
+}
+
+private struct WhisperCppRuntime: Sendable {
+    let executableURL: URL
+    let modelURL: URL
+    let threadCount: Int
+
+    static func loadBase() throws -> WhisperCppRuntime {
+        let executableURL = whisperCppCLIURL()
+        let modelURL = whisperCppBaseModelURL()
+        let fm = FileManager.default
+
+        guard fm.isExecutableFile(atPath: executableURL.path) else {
+            throw WhisperCppRuntimeError.missingExecutable(executableURL)
+        }
+        guard fm.fileExists(atPath: modelURL.path) else {
+            throw WhisperCppRuntimeError.missingModel(modelURL)
+        }
+
+        return WhisperCppRuntime(
+            executableURL: executableURL,
+            modelURL: modelURL,
+            threadCount: defaultThreadCount()
+        )
+    }
+
+    func transcribe(samples: [Float], requestedAt: TimeInterval) throws -> TranscriptionWorkerResult {
+        let workerEnteredAt = ProcessInfo.processInfo.systemUptime
+        let preparationStartedAt = ProcessInfo.processInfo.systemUptime
+        let runDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SuperDictate-whisper-\(UUID().uuidString)", isDirectory: true)
+        let audioURL = runDirectory.appendingPathComponent("input.wav", isDirectory: false)
+
+        do {
+            try FileManager.default.createDirectory(at: runDirectory,
+                                                    withIntermediateDirectories: true,
+                                                    attributes: [.posixPermissions: 0o700])
+            try Self.writeMonoPCM16WAV(samples: samples,
+                                       sampleRate: Int(SAMPLE_RATE),
+                                       to: audioURL)
+        } catch {
+            try? FileManager.default.removeItem(at: runDirectory)
+            throw WhisperCppRuntimeError.wavWriteFailed(error.localizedDescription)
+        }
+
+        defer {
+            try? FileManager.default.removeItem(at: runDirectory)
+        }
+
+        let process = Process()
+        process.executableURL = executableURL
+        process.currentDirectoryURL = executableURL.deletingLastPathComponent()
+        process.arguments = [
+            "-m", modelURL.path,
+            "-f", audioURL.path,
+            "-t", "\(threadCount)",
+            "-nt",
+        ]
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        let callStartedAt = ProcessInfo.processInfo.systemUptime
+        try process.run()
+        process.waitUntilExit()
+        let callCompletedAt = ProcessInfo.processInfo.systemUptime
+
+        let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(),
+                            encoding: .utf8) ?? ""
+        let errorOutput = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(),
+                                 encoding: .utf8) ?? ""
+        let detail = Self.diagnosticPreview([output, errorOutput]
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines))
+
+        guard process.terminationStatus == 0 else {
+            throw WhisperCppRuntimeError.processFailed(exitCode: process.terminationStatus,
+                                                       detail: detail)
+        }
+
+        let text = Self.cleanedTranscriptOutput(output)
+        guard !text.isEmpty else {
+            throw WhisperCppRuntimeError.emptyOutput(detail: detail)
+        }
+
+        return TranscriptionWorkerResult(
+            text: text,
+            workerQueueSeconds: workerEnteredAt - requestedAt,
+            decoderPreparationSeconds: callStartedAt - preparationStartedAt,
+            fluidCallSeconds: callCompletedAt - callStartedAt,
+            fluidProcessingSeconds: callCompletedAt - callStartedAt
+        )
+    }
+
+    private static func defaultThreadCount() -> Int {
+        max(2, min(8, ProcessInfo.processInfo.processorCount - 1))
+    }
+
+    private static func writeMonoPCM16WAV(samples: [Float],
+                                         sampleRate: Int,
+                                         to url: URL) throws {
+        let bytesPerSample = 2
+        let dataByteCount = samples.count * bytesPerSample
+        let byteRate = sampleRate * bytesPerSample
+        let blockAlign = UInt16(bytesPerSample)
+
+        var data = Data()
+        data.reserveCapacity(44 + dataByteCount)
+        data.appendASCII("RIFF")
+        data.appendLittleEndian(UInt32(36 + dataByteCount))
+        data.appendASCII("WAVE")
+        data.appendASCII("fmt ")
+        data.appendLittleEndian(UInt32(16))
+        data.appendLittleEndian(UInt16(1))
+        data.appendLittleEndian(UInt16(1))
+        data.appendLittleEndian(UInt32(sampleRate))
+        data.appendLittleEndian(UInt32(byteRate))
+        data.appendLittleEndian(blockAlign)
+        data.appendLittleEndian(UInt16(16))
+        data.appendASCII("data")
+        data.appendLittleEndian(UInt32(dataByteCount))
+
+        for sample in samples {
+            let clamped = Swift.max(-1, Swift.min(1, sample))
+            let scaled = Int((clamped * Float(Int16.max)).rounded())
+            data.appendLittleEndian(Int16(clamping: scaled))
+        }
+
+        try data.write(to: url, options: [.atomic])
+    }
+
+    private static func cleanedTranscriptOutput(_ output: String) -> String {
+        output
+            .components(separatedBy: .newlines)
+            .compactMap { rawLine -> String? in
+                let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                let lower = trimmed.lowercased()
+                if lower.hasPrefix("whisper_")
+                    || lower.hasPrefix("system_info:")
+                    || lower.hasPrefix("main:")
+                    || lower.hasPrefix("ggml_") {
+                    return nil
+                }
+                let withoutTimestamp = trimmed
+                    .replacingOccurrences(
+                        of: #"^\[[0-9:. ]+-->\s*[0-9:. ]+\]\s*"#,
+                        with: "",
+                        options: .regularExpression
+                    )
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return withoutTimestamp.isEmpty ? nil : withoutTimestamp
+            }
+            .joined(separator: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func diagnosticPreview(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "No diagnostic output was captured." }
+        if trimmed.count <= 2_000 {
+            return trimmed
+        }
+        return String(trimmed.prefix(2_000)) + "\n…"
+    }
 }
 
 private struct TranscriptionWorkerResult: Sendable {
@@ -5241,13 +5559,22 @@ actor TranscriptionWorker {
             await unload()
         }
 
-        if speechModelCacheExists(for: profile) {
+        if profile.requiresExternalWhisperCppRuntime {
+            log("ASR: validating local \(profile.shortName) whisper.cpp runtime…")
+        } else if speechModelCacheExists(for: profile) {
             log("ASR: verifying + loading cached \(profile.shortName) CoreML weights…")
         } else {
             log("ASR: downloading + verifying + loading \(profile.shortName) CoreML weights…")
         }
         let t0 = Date()
-        engine = .parakeetV3(try await loadParakeetV3(progressHandler: progressHandler))
+        switch profile {
+        case .multilingualV3:
+            engine = .parakeetV3(try await loadParakeetV3(progressHandler: progressHandler))
+        case .whisperCppBase:
+            engine = .whisperCppBase(try WhisperCppRuntime.loadBase())
+        case .englishUnified:
+            engine = .parakeetV3(try await loadParakeetV3(progressHandler: progressHandler))
+        }
         loadedProfile = profile
         ready = true
         log("ASR: \(profile.shortName) ready in \(String(format: "%.2f", Date().timeIntervalSince(t0))) s")
@@ -5301,10 +5628,21 @@ actor TranscriptionWorker {
                 fluidCallSeconds: fluidCallCompletedAt - fluidCallStartedAt,
                 fluidProcessingSeconds: result.processingTime
             )
+        case .whisperCppBase(let runtime):
+            return try runtime.transcribe(samples: samples, requestedAt: requestedAt)
         }
     }
 
     func warmUp() async throws -> ASRTimingBreakdown {
+        if case .whisperCppBase = engine {
+            return ASRTimingBreakdown(
+                totalSeconds: 0,
+                workerQueueSeconds: 0,
+                decoderPreparationSeconds: 0,
+                fluidCallSeconds: 0,
+                fluidProcessingSeconds: 0
+            )
+        }
         let samples = [Float](repeating: 0, count: Int(SAMPLE_RATE * 0.4))
         let requestedAt = ProcessInfo.processInfo.systemUptime
         let transcription = try await transcribe(
@@ -10052,15 +10390,16 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
                 do {
                     let warmUpTiming = try await asr.warmUp()
-                    log("ASR: CoreML warm-up completed in \(millisecondsLabel(warmUpTiming.totalSeconds))")
+                    log("ASR: \(speechModelProfile.shortName) warm-up completed in \(millisecondsLabel(warmUpTiming.totalSeconds))")
                 } catch {
                     // Model loading succeeded, so a failed best-effort warm-up
                     // must not make the dictation service unavailable.
-                    log("ASR: CoreML warm-up skipped: \(error.localizedDescription)")
+                    log("ASR: \(speechModelProfile.shortName) warm-up skipped: \(error.localizedDescription)")
                 }
                 guard !Task.isCancelled, !isTerminating else { return }
 
                 fallbackSpeechModelProfileAfterStartupFailure = nil
+                isSwitchingSpeechModel = false
                 isSpeechModelReady = true
                 speechModelStartupProgressFraction = nil
 
@@ -12197,15 +12536,18 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func currentWorkbenchModelStates() -> [LocalModelRuntimeState] {
+        let profile = settings.speechModelProfile
         let speechModel = LocalAIModelDescriptor(
-            id: "fluidaudio.\(settings.speechModelProfile.rawValue)",
-            displayName: settings.speechModelProfile.shortName,
+            id: profile.runtimeModelID,
+            displayName: profile.shortName,
             adapterKind: .custom,
             capabilities: [.transcription],
-            licenseSummary: "Local FluidAudio speech model used by the macOS runtime.",
-            approximateDiskBytes: settings.speechModelProfile.estimatedDownloadBytes,
+            licenseSummary: profile.requiresExternalWhisperCppRuntime
+                ? "Local whisper.cpp speech model used by the Intel preview runtime."
+                : "Local FluidAudio speech model used by the macOS runtime.",
+            approximateDiskBytes: profile.estimatedDownloadBytes,
             requiresNetworkDownload: false,
-            notes: settings.speechModelProfile.aboutModelText
+            notes: profile.aboutModelText
         )
         let installState: LocalModelInstallState
         if isSpeechModelReady {
@@ -13147,14 +13489,18 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let resetModel = NSMenuItem(title: isResettingSpeechModelCache ? "Resetting Speech Model Cache…" : "Reset Speech Model Cache…",
                                     action: #selector(resetSpeechModelCacheClicked(_:)),
                                     keyEquivalent: "")
+        let speechProfile = settings.speechModelProfile
         resetModel.target = self
-        resetModel.isEnabled = !isRecording
+        resetModel.isEnabled = speechProfile.supportsAutomaticCacheReset
+            && !isRecording
             && !isBusy
             && !isTerminating
             && startupTask == nil
             && !isResettingSpeechModelCache
             && !isSwitchingSpeechModel
-        resetModel.toolTip = "Delete the speech model cache and download a fresh verified copy."
+        resetModel.toolTip = speechProfile.supportsAutomaticCacheReset
+            ? "Delete the speech model cache and download a fresh verified copy."
+            : speechProfile.cacheResetDetail
         sub.addItem(resetModel)
 
         parent.submenu = sub
@@ -13771,6 +14117,7 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         sub.addItem(buildHotkeySettingsItem())
         sub.addItem(buildTriggerSettingsItem())
         sub.addItem(buildDictationLanguageSettingsItem())
+        sub.addItem(buildSpeechModelSettingsItem())
         sub.addItem(buildInputDeviceItem())
 
         parent.submenu = sub
@@ -13945,6 +14292,37 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         langParent.submenu = langSub
         return langParent
+    }
+
+    private func buildSpeechModelSettingsItem() -> NSMenuItem {
+        let modelParent = NSMenuItem(title: "Speech Model", action: nil, keyEquivalent: "")
+        let modelSub = NSMenu()
+        modelSub.autoenablesItems = false
+        let current = settings.speechModelProfile
+        let canSwitch = !isRecording
+            && !isBusy
+            && !isTerminating
+            && startupTask == nil
+            && !isResettingSpeechModelCache
+            && !isSwitchingSpeechModel
+
+        for profile in SpeechModelProfile.allCases where profile.isProductionSupported {
+            let item = NSMenuItem(title: profile.displayName,
+                                  action: #selector(selectSpeechModelProfile(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.state = (profile == current) ? .on : .off
+            item.representedObject = profile.rawValue
+            item.isEnabled = canSwitch || profile == current
+            item.toolTip = profile.aboutModelText
+            if profile.requiresExternalWhisperCppRuntime, !speechModelCacheExists(for: profile) {
+                item.toolTip = "Requires local whisper.cpp setup. Run scripts/setup-whisper-intel.sh from the repository."
+            }
+            modelSub.addItem(item)
+        }
+
+        modelParent.submenu = modelSub
+        return modelParent
     }
 
     private func buildPasteSuffixSettingsItem() -> NSMenuItem {
@@ -15205,6 +15583,39 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         rebuildMenu()
     }
 
+    @objc private func selectSpeechModelProfile(_ sender: NSMenuItem) {
+        guard !isRecording,
+              !isBusy,
+              !isTerminating,
+              startupTask == nil,
+              !isResettingSpeechModelCache,
+              !isSwitchingSpeechModel,
+              let raw = sender.representedObject as? String,
+              let requestedProfile = SpeechModelProfile(rawValue: raw),
+              requestedProfile.isProductionSupported else { return }
+
+        let profile = requestedProfile.productionProfile
+        let previousProfile = settings.speechModelProfile
+        guard profile != previousProfile else {
+            rebuildMenu()
+            return
+        }
+
+        fallbackSpeechModelProfileAfterStartupFailure = previousProfile
+        settings.speechModelProfile = profile
+        isSwitchingSpeechModel = true
+        startupStatusTitle = "Switching to \(profile.shortName)…"
+        speechModelStartupProgressFraction = nil
+        log("ASR: switching speech model from \(previousProfile.shortName) to \(profile.shortName)")
+        setMenuBarState(.loading)
+        rebuildMenu()
+
+        Task { @MainActor in
+            await asr.unload()
+            startStartup(reason: "speech model change")
+        }
+    }
+
     @objc private func selectRecentTranscriptLimit(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String,
               let limit = RecentTranscriptLimit(rawValue: raw) else { return }
@@ -15307,7 +15718,8 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
               startupTask == nil,
               !isResettingSpeechModelCache,
               !isSwitchingSpeechModel,
-              !isTerminating else { return }
+              !isTerminating,
+              settings.speechModelProfile.supportsAutomaticCacheReset else { return }
 
         showAppForModal()
         let alert = NSAlert()
@@ -15363,7 +15775,7 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let alert = NSAlert()
         alert.messageText = "SuperDictate \(currentBundleVersion())"
         alert.informativeText = """
-            Lightweight push-to-talk dictation for Apple Silicon Macs.
+            Lightweight push-to-talk dictation for Mac.
 
             Hotkey:  \(hotkey.hotkey.name)
             Mode:    \(TRIGGER_DISPLAY[settings.triggerMode] ?? settings.triggerMode.rawValue)
@@ -16666,6 +17078,11 @@ private enum ParakeySelfTest {
             productionSpeechModelProfile(rawValue: SpeechModelProfile.multilingualV3.rawValue),
             equals: .multilingualV3,
             "stored v3 speech model should remain valid"
+        )
+        try expect(
+            productionSpeechModelProfile(rawValue: SpeechModelProfile.whisperCppBase.rawValue),
+            equals: .whisperCppBase,
+            "stored Whisper.cpp Base speech model should remain valid"
         )
         try expect(
             productionSpeechModelProfile(rawValue: SpeechModelProfile.englishUnified.rawValue),

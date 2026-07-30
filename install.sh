@@ -13,6 +13,7 @@ EXPECTED_SOURCE_COMMIT="${SUPERDICTATE_SOURCE_COMMIT:-$SOURCE_COMMIT}"
 APP_PATH="${SUPERDICTATE_APP_PATH:-/Applications/SuperDictate.app}"
 BUILD_FROM_SOURCE="${SUPERDICTATE_BUILD_FROM_SOURCE:-0}"
 NO_OPEN="${SUPERDICTATE_NO_OPEN:-0}"
+INTEL_PREVIEW="${SUPERDICTATE_ENABLE_INTEL_PREVIEW:-0}"
 AGENT_LABEL="com.local.superdictate.agent"
 
 say() {
@@ -53,7 +54,7 @@ run_as_admin() {
 verify_app() {
     local app="$1"
     local executable="$app/Contents/MacOS/SuperDictate"
-    local bundle_id version minimum_system entitlements_file audio_input microphone
+    local bundle_id version minimum_system entitlements_file audio_input microphone executable_info
 
     [[ -x "$executable" ]] || fail "В архиве нет исполняемого файла SuperDictate."
     bundle_id="$(plutil -extract CFBundleIdentifier raw -o - "$app/Contents/Info.plist")"
@@ -62,7 +63,14 @@ verify_app() {
     [[ "$version" == "$RELEASE_VERSION" ]] || fail "Ожидалась версия $RELEASE_VERSION, получена $version."
     minimum_system="$(plutil -extract LSMinimumSystemVersion raw -o - "$app/Contents/Info.plist")"
     [[ "$minimum_system" == "14.0" ]] || fail "Неожиданная минимальная версия macOS: $minimum_system"
-    file "$executable" | grep -q 'arm64' || fail "Сборка не предназначена для Apple Silicon."
+    executable_info="$(file "$executable")"
+    if is_apple_silicon; then
+        printf '%s\n' "$executable_info" | grep -q 'arm64' || fail "Сборка не предназначена для Apple Silicon."
+    elif [[ "$INTEL_PREVIEW" == "1" && "$BUILD_FROM_SOURCE" == "1" ]]; then
+        printf '%s\n' "$executable_info" | grep -q 'x86_64' || fail "Intel preview сборка не содержит x86_64 бинарник."
+    else
+        fail "Нужен Mac с Apple Silicon (M1 или новее). Для Intel preview используйте сборку из исходников."
+    fi
     codesign --verify --deep --strict "$app" || fail "Проверка подписи приложения не прошла."
     entitlements_file="$WORK_DIR/verified-entitlements.plist"
     codesign -d --entitlements :- "$app" > "$entitlements_file" 2>/dev/null
@@ -128,7 +136,9 @@ build_from_source() {
 }
 
 [[ "$(/usr/bin/uname -s)" == "Darwin" ]] || fail "Работает только на macOS."
-is_apple_silicon || fail "Нужен Mac с Apple Silicon (M1 или новее)."
+if ! is_apple_silicon; then
+    [[ "$INTEL_PREVIEW" == "1" && "$BUILD_FROM_SOURCE" == "1" ]] || fail "Нужен Mac с Apple Silicon (M1 или новее). Для Intel preview запустите с SUPERDICTATE_ENABLE_INTEL_PREVIEW=1 SUPERDICTATE_BUILD_FROM_SOURCE=1."
+fi
 version_at_least_14 || fail "Нужна macOS 14 или новее."
 
 for command_name in curl ditto shasum plutil file codesign sed head; do

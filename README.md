@@ -150,6 +150,32 @@ curl -fsSL https://raw.githubusercontent.com/shlgd/SuperDictate/v0.2.37/install.
 `SUPERDICTATE_REF` и `SUPERDICTATE_SOURCE_COMMIT`; без совпадения коммита
 установщик не запустит скачанный `scripts/build-app.sh`.
 
+### Intel Mac preview
+
+Готовый релиз пока остаётся Apple Silicon-only. На Intel Mac можно запустить
+веб-рабочий стол сразу и собрать нативный preview из исходников с локальной
+моделью Whisper.cpp Base:
+
+```bash
+xcode-select --install
+brew install cmake
+scripts/setup-whisper-intel.sh
+SUPERDICTATE_ENABLE_INTEL_PREVIEW=1 ./scripts/build-app.sh ./dist/SuperDictate.app
+open ./dist/SuperDictate.app
+```
+
+В приложении выберите `Settings` -> `Dictation` -> `Speech Model` ->
+`Whisper.cpp Base`. Подробности: [docs/INTEL_PREVIEW.md](docs/INTEL_PREVIEW.md).
+
+Веб-превью не требует сборки:
+
+```bash
+python3 -m http.server 5173 --bind 127.0.0.1
+```
+
+После запуска откройте `http://127.0.0.1:5173/web/`. Если порт занят, укажите
+соседний свободный порт и замените его в URL.
+
 ### Ручная сборка для разработки
 
 ```bash
@@ -188,7 +214,8 @@ GitHub Actions повторяет самотесты, собирает bundle, �
 
 ## Ограничения
 
-- Поддерживаются только Apple Silicon и macOS 14 или новее. Intel Mac,
+- Готовый релиз поддерживает Apple Silicon и macOS 14 или новее. Intel Mac
+  доступен только как source preview через `SUPERDICTATE_ENABLE_INTEL_PREVIEW=1`;
   Windows и Linux пока не поддерживаются.
 - Публичная сборка подписана ad-hoc и не нотарифицирована Apple. Установка
   через команду выше проверена, но ZIP, скачанный вручную через браузер, может
