@@ -5,17 +5,26 @@ preview.
 
 Last source review: 2026-07-30.
 
-Detailed research: [NATIVE_DESIGN_RESEARCH.md](NATIVE_DESIGN_RESEARCH.md).
+Detailed research:
+
+- [NATIVE_DESIGN_RESEARCH.md](NATIVE_DESIGN_RESEARCH.md)
+- [POCKET_ALTERNATIVE_PRODUCT_RESEARCH.md](POCKET_ALTERNATIVE_PRODUCT_RESEARCH.md)
 
 ## Product Design Verdict
 
-SuperDictate must feel like a real local-first Mac utility, not a web dashboard.
-The product surface is:
+SuperDictate must feel like a real local-first Mac utility and a native
+cross-platform capture product, not a web dashboard. The product target is an
+app-only alternative to Pocket / HeyPocket AI: capture conversations anywhere,
+process them locally first where possible, and turn them into trusted memory and
+follow-through.
 
-Record -> transcribe -> review -> summarize -> extract tasks -> export.
+The product loop is:
+
+Capture -> process -> review -> execute -> remember.
 
 Everything else exists to support that path: model choice, recovery, storage,
-privacy, hotkeys, and advanced inspection.
+privacy, hotkeys, evidence links, tasks, calendar, Ask, export, and advanced
+inspection.
 
 ## Source Of Truth
 
@@ -99,11 +108,12 @@ colors, accessibility labels, and adaptive layouts.
 
 ### Main Mac Window
 
-- Sidebar: Recordings, Today, Transcripts, Tasks, Models, Recovery, Settings
-- Toolbar: record, pause, stop, marker, model selector, export, search
-- Center: live transcript/editor, speaker segments, timeline, summary tabs
-- Inspector: active model, local runtime, chunks, recovery state, exports,
-  provenance, technical details
+- Sidebar: Today, Capture, Library, Tasks, Ask, People, Models, Settings
+- Toolbar: record, stop, lens selector, model selector, search, export, share
+- Center: capture surface, recording detail, transcript/editor, speaker
+  segments, timeline, AI review, mind map, task checklist
+- Inspector: active model, local runtime, processing state, evidence, exports,
+  recovery, provenance, technical details
 
 ### Menu Bar
 
@@ -142,16 +152,19 @@ colors, accessibility labels, and adaptive layouts.
 
 ## Immediate Repair Backlog
 
-1. Rename technical panels and make the workflow obvious:
-   Recorder, Transcript, AI Review, Tasks, Export, Model, Recovery.
+1. Reframe the product around Today, Capture, Library, AI Review, Tasks, Ask,
+   People, Models, and Settings.
 2. Add a real model manager:
    Recommended for this Mac, installed, needs download, source, size, speed,
    accuracy, language support, privacy mode, and actions.
 3. Make demo mode exercise the full product loop:
-   recording state, transcript, summary, decisions, risks, tasks, chunks,
-   recovery, export, and model choice.
+   capture, processing, transcript, evidence-backed summary, decisions, risks,
+   tasks, calendar scheduling, Ask, model choice, recovery, and export.
 4. Replace recovery JSON-first UI with human recovery states and a technical
    details disclosure.
-5. Build the native SwiftUI workbench shell from this information architecture.
-6. Keep the web preview aligned with the native workbench until the native Intel
+5. Add lens selector, Ask scope chips, speaker/person management, mind map
+   preview, and task evidence links to the web preview before rebuilding the
+   native shell.
+6. Build the native SwiftUI workbench shell from this information architecture.
+7. Keep the web preview aligned with the native workbench until the native Intel
    build is stable enough for daily testing.

@@ -16,9 +16,20 @@ The product must support:
 
 The existing macOS application remains a first-class local dictation client. New applications add long-form recording, synchronization, transcription, structured memory and wearable capture.
 
+## Product target
+
+SuperDictate is a cross-platform, app-only alternative to Pocket / HeyPocket AI:
+a conversation capture system that turns speech into trusted memory and
+follow-through without requiring dedicated hardware.
+
+The external product and interaction research lives in
+[POCKET_ALTERNATIVE_PRODUCT_RESEARCH.md](POCKET_ALTERNATIVE_PRODUCT_RESEARCH.md).
+This research is part of the product contract, not a loose inspiration board.
+
 ## Product promise
 
-Press once, speak or record a meeting, and receive a trustworthy searchable result:
+Press once from the current platform, speak or record a meeting, and receive a
+trustworthy searchable result:
 
 - verbatim transcript;
 - short summary;
@@ -30,6 +41,12 @@ Press once, speak or record a meeting, and receive a trustworthy searchable resu
 - export or follow-up action.
 
 A recording must never depend on a live network connection. Every client saves locally first, then uploads and processes asynchronously.
+
+The product loop is:
+
+```text
+Capture -> process -> review -> execute -> remember
+```
 
 ## Platform roles
 
@@ -118,6 +135,8 @@ A recording must never depend on a live network connection. Every client saves l
 
 - copy formatted text;
 - share transcript or summary;
+- verify an action item against the exact transcript moment;
+- add action items to a calendar slot;
 - create reminders and calendar events;
 - export Markdown, TXT, PDF, DOCX and SRT/VTT;
 - send to Telegram, email, Notion and webhooks;
