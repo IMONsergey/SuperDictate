@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>SuperDictate Workbench</title>
-    <link rel="stylesheet" href="./styles.css?v=20260730-8">
+    <link rel="stylesheet" href="./styles.css?v=20260730-9">
   </head>
   <body>
     <main class="app-shell">
@@ -185,14 +185,15 @@
             <div class="today-hero">
               <div>
                 <div class="eyebrow">Local-first · app-only Pocket alternative</div>
-                <h2>Запиши разговор. Получи память, задачи и следующий шаг.</h2>
+                <h2>Запись, память и действия без лишнего шума.</h2>
                 <p>
-                  Первый экран теперь ведет по реальному циклу: capture, transcript,
-                  AI review, tasks, calendar, Ask и export. Запись остается локальной,
-                  модель выбрана явно.
+                  Один старт, локальное сохранение, затем transcript, AI review,
+                  задачи, календарь и вопросы по памяти. Технические детали не
+                  мешают основному сценарию.
                 </p>
               </div>
-              <div class="today-actions">
+              <div class="today-actions command-panel">
+                <span class="badge">Готово к записи</span>
                 <button class="control primary" id="startTodayBtn" type="button">Начать запись</button>
                 <button class="button ghost" id="openTranscriptBtn" type="button">Вставить текст</button>
                 <button class="button ghost" id="openReviewBtn" type="button">Открыть review</button>
@@ -543,6 +544,6 @@
         </aside>
       </section>
     </main>
-    <script src="./app.js?v=20260730-8"></script>
+    <script src="./app.js?v=20260730-9"></script>
   </body>
 </html>

@@ -1289,6 +1289,7 @@ async function recoverSession() {
 
 function switchTab(tab) {
   state.activeTab = tab;
+  document.body.dataset.activeTab = tab;
   $$(".tab-panel").forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === tab));
   $$(".nav-item[data-tab]").forEach((button) => button.classList.toggle("active", button.dataset.tab === tab));
   persist();

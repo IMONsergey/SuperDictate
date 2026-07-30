@@ -55,6 +55,14 @@ button {
   cursor: pointer;
 }
 
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(10, 132, 255, 0.34);
+  outline-offset: 2px;
+}
+
 button:disabled,
 input:disabled {
   cursor: not-allowed;
@@ -1258,5 +1266,343 @@ summary {
 
   canvas {
     height: 210px;
+  }
+}
+
+/* Visual polish v2: native workbench hierarchy over diagnostic dashboard density. */
+body {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0) 220px),
+    #f4f6f8;
+}
+
+.window-bar {
+  min-height: 58px;
+  grid-template-columns: auto minmax(210px, 0.7fr) minmax(280px, 0.9fr) auto;
+  border-bottom-color: rgba(180, 188, 200, 0.62);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.68);
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  box-shadow: none;
+}
+
+.workflow-strip {
+  display: flex;
+  gap: 8px;
+  margin: 10px 18px 0 306px;
+  padding: 0;
+  overflow-x: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.pipeline-step {
+  min-width: 138px;
+  min-height: 38px;
+  padding: 7px 10px;
+  flex: 1 1 0;
+  grid-template-columns: 21px minmax(0, 1fr);
+  column-gap: 7px;
+  border: 1px solid rgba(216, 222, 232, 0.86);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: none;
+}
+
+.pipeline-step span {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 11px;
+  background: #f3f6fa;
+}
+
+.pipeline-step strong {
+  font-size: 12px;
+}
+
+.pipeline-step em {
+  font-size: 11px;
+}
+
+.pipeline-step.complete {
+  color: #354052;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.pipeline-step.complete span {
+  color: #0f684d;
+  background: var(--green-fill);
+}
+
+.pipeline-step.active {
+  color: #075ca8;
+  border-color: rgba(10, 132, 255, 0.38);
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.08);
+}
+
+.workspace {
+  grid-template-columns: 236px minmax(620px, 1fr) 300px;
+  gap: 16px;
+  padding-top: 12px;
+}
+
+.leftbar {
+  padding: 10px;
+  border-color: rgba(216, 222, 232, 0.82);
+  background: rgba(246, 248, 251, 0.82);
+  box-shadow: none;
+}
+
+.rightbar {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.leftbar .panel {
+  padding: 10px 4px;
+  border-bottom: 0;
+}
+
+.rightbar .panel {
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid rgba(216, 222, 232, 0.88);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: none;
+}
+
+.rightbar .panel:last-child {
+  margin-bottom: 0;
+}
+
+body[data-active-tab="today"] .rightbar .evidence-panel,
+body[data-active-tab="today"] .rightbar .chunks-panel,
+body[data-active-tab="today"] .rightbar .markers-panel,
+body[data-active-tab="today"] .rightbar .recovery-panel {
+  display: none;
+}
+
+body[data-active-tab="today"] .mode-panel,
+body[data-active-tab="today"] .session-panel {
+  display: none;
+}
+
+.main-column {
+  border-color: rgba(216, 222, 232, 0.86);
+  border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
+}
+
+.tab-panel {
+  padding: 26px;
+}
+
+.panel-title {
+  margin-bottom: 8px;
+  color: #6a7280;
+  letter-spacing: 0;
+}
+
+.nav-list {
+  gap: 2px;
+}
+
+.nav-item {
+  min-height: 40px;
+  padding: 7px 9px;
+  border-color: transparent;
+  border-radius: 7px;
+  background: transparent;
+}
+
+.nav-item strong {
+  display: none;
+}
+
+.nav-item.active {
+  color: #0b4f91;
+  border-color: rgba(10, 132, 255, 0.18);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.mode-list {
+  gap: 6px;
+}
+
+.mode-row {
+  min-height: 44px;
+  padding: 8px 9px;
+  border-color: rgba(216, 222, 232, 0.72);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.today-hero {
+  gap: 28px;
+  grid-template-columns: minmax(0, 1fr) 236px;
+  margin: -26px -26px 20px;
+  padding: 30px 32px 26px;
+  border-bottom-color: rgba(216, 222, 232, 0.78);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(241, 247, 244, 0.86) 52%, rgba(238, 244, 252, 0.9));
+}
+
+.today-hero h2 {
+  max-width: 660px;
+  margin-bottom: 11px;
+  font-size: 34px;
+  line-height: 1.04;
+}
+
+.today-hero p {
+  max-width: 660px;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.command-panel {
+  align-items: stretch;
+  padding: 14px;
+  border: 1px solid rgba(216, 222, 232, 0.78);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.today-actions .control.primary {
+  min-height: 58px;
+  border-radius: 10px;
+  font-size: 16px;
+}
+
+.today-actions .button {
+  min-height: 38px;
+  border-radius: 8px;
+}
+
+.today-grid {
+  gap: 12px;
+  grid-template-columns: 1.15fr 1fr 1fr;
+  margin-top: 12px;
+}
+
+.work-card,
+.result-block,
+.task-item,
+.library-item,
+.person-card,
+.calendar-item,
+.evidence-item,
+.state-item,
+.setting-row,
+.ask-answer {
+  border-color: rgba(216, 222, 232, 0.86);
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: none;
+}
+
+.work-card {
+  min-height: 118px;
+  padding: 15px;
+}
+
+.work-card.primary-work {
+  border-color: rgba(18, 128, 92, 0.24);
+  background: rgba(247, 252, 249, 0.86);
+}
+
+.card-kicker,
+.eyebrow {
+  color: #187052;
+  letter-spacing: 0;
+}
+
+.section-grid.two {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+.state-item {
+  min-height: 40px;
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.calendar-item {
+  background: #ffffff;
+}
+
+.inspector-summary {
+  border-color: rgba(18, 128, 92, 0.2);
+  background: rgba(247, 252, 249, 0.86);
+}
+
+@media (max-width: 1360px) {
+  .workflow-strip {
+    margin-left: 18px;
+  }
+
+  .workspace {
+    grid-template-columns: 236px minmax(460px, 1fr);
+  }
+
+  .rightbar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  body[data-active-tab="today"] .rightbar {
+    display: flex;
+  }
+}
+
+@media (max-width: 1080px) {
+  .workflow-strip {
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+
+  .leftbar {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .nav-list {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .workflow-strip {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .pipeline-step {
+    min-width: 0;
+    border-radius: 8px;
+  }
+
+  .today-hero,
+  .today-grid,
+  .section-grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  .today-hero {
+    margin: -26px -26px 18px;
+    padding: 24px;
+  }
+
+  .today-hero h2 {
+    font-size: 28px;
   }
 }
