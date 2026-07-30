@@ -16,6 +16,7 @@ const elements = {
   stepTranscript: $("#stepTranscript"),
   stepSummary: $("#stepSummary"),
   stepTasks: $("#stepTasks"),
+  stepExport: $("#stepExport"),
   activeModeLabel: $("#activeModeLabel"),
   modeGrid: $("#modeGrid"),
   sessionState: $("#sessionState"),
@@ -61,9 +62,15 @@ const elements = {
   journalView: $("#journalView"),
   crashBtn: $("#crashBtn"),
   recoverBtn: $("#recoverBtn"),
+  exportPreview: $("#exportPreview"),
+  copyPackageBtn: $("#copyPackageBtn"),
+  downloadMarkdownBtn: $("#downloadMarkdownBtn"),
+  sourceCard: $("#sourceCard"),
+  modelCard: $("#modelCard"),
+  packageCard: $("#packageCard"),
 };
 
-const STORAGE_KEY = "superdictate.web.workbench.v2";
+const STORAGE_KEY = "superdictate.web.workbench.v3";
 const DB_NAME = "superdictate-web-workbench";
 const DB_VERSION = 1;
 const CHUNK_STORE = "chunks";
@@ -273,6 +280,7 @@ function render() {
   renderSession();
   renderPanels();
   renderResults();
+  renderExport();
 }
 
 function renderModelControls() {
@@ -289,7 +297,8 @@ function renderModelControls() {
   elements.modelList.innerHTML = "";
   for (const model of modelCatalog) {
     const card = document.createElement("article");
-    card.className = `model-card${model.id === state.selectedModel ? " active" : ""}`;
+    const selectable = model.id !== "local_summarizer";
+    card.className = `model-card${model.id === state.selectedModel ? " active" : ""}${selectable ? "" : " disabled"}`;
     card.innerHTML = `
       <h3>${escapeHtml(model.title)}</h3>
       <p>${escapeHtml(model.subtitle)}</p>
@@ -297,8 +306,11 @@ function renderModelControls() {
         <span class="pill">${escapeHtml(model.status)}</span>
         ${model.tags.map((tag) => `<span class="pill">${escapeHtml(tag)}</span>`).join("")}
       </div>
+      <button class="button ${model.id === state.selectedModel ? "primary-text" : "ghost"}" type="button">
+        ${model.id === state.selectedModel ? "Используется" : selectable ? "Выбрать" : "Скоро"}
+      </button>
     `;
-    if (model.id !== "local_summarizer") {
+    if (selectable) {
       card.addEventListener("click", () => {
         state.selectedModel = model.id;
         persist();
@@ -320,6 +332,9 @@ function renderPipeline() {
   elements.stepTranscript.textContent = state.transcript.trim() ? `${wordCount(state.transcript)} слов` : "текст пуст";
   elements.stepSummary.textContent = state.summary ? "готова" : "не создана";
   elements.stepTasks.textContent = taskLabel(state.actions.length);
+  if (elements.stepExport) {
+    elements.stepExport.textContent = exportReady() ? "можно скачать" : "нет данных";
+  }
 }
 
 function stepComplete(tab) {
@@ -327,6 +342,7 @@ function stepComplete(tab) {
   if (tab === "transcript") return state.transcript.trim().length > 0;
   if (tab === "summary") return Boolean(state.summary);
   if (tab === "tasks") return state.actions.length > 0;
+  if (tab === "export") return exportReady();
   return false;
 }
 
@@ -351,6 +367,15 @@ function renderSession() {
   elements.transcriptStatus.textContent = transcriptStatusText();
   elements.summaryStatus.textContent = state.summary ? "Выжимка создана локально в preview." : "Добавьте текст и запустите выжимку.";
   elements.taskStatus.textContent = state.actions.length ? taskLabel(state.actions.length) : "Задачи появятся после выжимки.";
+  if (elements.sourceCard) {
+    elements.sourceCard.textContent = state.transcript.trim() ? `${wordCount(state.transcript)} слов в тексте` : "микрофон или текстовый ввод";
+  }
+  if (elements.modelCard) {
+    elements.modelCard.textContent = `${selectedModel().shortTitle} выбрана`;
+  }
+  if (elements.packageCard) {
+    elements.packageCard.textContent = `${fragmentLabel(state.chunks.length)} · ${elements.recoveryState.textContent.toLowerCase()}`;
+  }
 }
 
 function transcriptStatusText() {
@@ -424,6 +449,11 @@ function renderResults() {
   renderList(elements.decisionList, state.decisions, "Пока нет решений.");
   renderList(elements.riskList, state.risks, "Пока нет рисков.");
   renderTasks();
+}
+
+function renderExport() {
+  if (!elements.exportPreview) return;
+  elements.exportPreview.textContent = exportPackageText();
 }
 
 function renderList(list, items, emptyText) {
@@ -899,7 +929,18 @@ function addManualTask() {
 }
 
 function exportJSON() {
-  const payload = {
+  const payload = exportPayload();
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  downloadBlob(blob, `superdictate-${state.sessionId.slice(0, 8)}.json`);
+}
+
+function exportMarkdown() {
+  const blob = new Blob([exportPackageText()], { type: "text/markdown;charset=utf-8" });
+  downloadBlob(blob, `superdictate-${state.sessionId.slice(0, 8)}.md`);
+}
+
+function exportPayload() {
+  return {
     exported_at: new Date().toISOString(),
     session_id: state.sessionId,
     mode: state.mode,
@@ -912,13 +953,59 @@ function exportJSON() {
     risks: state.risks,
     actions: state.actions,
   };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+}
+
+function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `superdictate-${state.sessionId.slice(0, 8)}.json`;
+  anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function exportReady() {
+  return Boolean(state.transcript.trim() || state.summary || state.actions.length || state.chunks.length);
+}
+
+function exportPackageText() {
+  const selected = selectedModel();
+  const lines = [
+    "# SuperDictate Export",
+    "",
+    `Session: ${state.sessionId}`,
+    `Mode: ${modeLabel()}`,
+    `Model: ${selected.shortTitle}`,
+    `Status: ${state.status}`,
+    `Audio: ${fragmentLabel(state.chunks.length)} · ${formatBytes(state.chunks.reduce((sum, chunk) => sum + chunk.bytes, 0))}`,
+    "",
+    "## Transcript",
+    "",
+    state.transcript.trim() || "_No transcript yet._",
+    "",
+    "## Summary",
+    "",
+    state.summary || "_No summary yet._",
+    "",
+    "## Decisions",
+    "",
+    ...listOrEmpty(state.decisions),
+    "",
+    "## Risks",
+    "",
+    ...listOrEmpty(state.risks),
+    "",
+    "## Tasks",
+    "",
+    ...(state.actions.length
+      ? state.actions.map((task) => `${task.done ? "- [x]" : "- [ ]"} ${task.title} (${task.priority})`)
+      : ["_No tasks yet._"]),
+  ];
+  return lines.join("\n");
+}
+
+function listOrEmpty(items) {
+  return items.length ? items.map((item) => `- ${item}`) : ["_None._"];
 }
 
 async function copyText(text, successLabel) {
@@ -1009,7 +1096,7 @@ elements.pipeline.addEventListener("click", (event) => {
   const step = event.target.closest(".pipeline-step[data-tab]");
   if (step) switchTab(step.dataset.tab);
 });
-elements.pipelineExport.addEventListener("click", exportJSON);
+elements.pipelineExport.addEventListener("click", () => switchTab("export"));
 elements.modeGrid.addEventListener("click", (event) => {
   const button = event.target.closest(".mode-row");
   if (!button) return;
@@ -1045,6 +1132,12 @@ elements.addTaskBtn.addEventListener("click", addManualTask);
 elements.copyTasksBtn.addEventListener("click", () => copyText(tasksAsText(), "Задачи скопированы"));
 elements.crashBtn.addEventListener("click", simulateCrash);
 elements.recoverBtn.addEventListener("click", recoverSession);
+if (elements.copyPackageBtn) {
+  elements.copyPackageBtn.addEventListener("click", () => copyText(exportPackageText(), "Пакет скопирован"));
+}
+if (elements.downloadMarkdownBtn) {
+  elements.downloadMarkdownBtn.addEventListener("click", exportMarkdown);
+}
 elements.chunkWindowSelect.addEventListener("change", () => {
   state.chunkWindowSec = Number(elements.chunkWindowSelect.value);
   persist();
@@ -1057,7 +1150,7 @@ elements.transcriptInput.addEventListener("input", () => {
 });
 
 hydrate();
-if (!["recorder", "transcript", "summary", "tasks"].includes(state.activeTab)) state.activeTab = "recorder";
+if (!["recorder", "transcript", "summary", "tasks", "export"].includes(state.activeTab)) state.activeTab = "recorder";
 setStatus(state.status === "crashed" || state.status === "recoverable" ? state.status : "ready");
 switchTab(state.activeTab);
 drawIdleWaveform();
