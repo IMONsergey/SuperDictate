@@ -62,8 +62,13 @@ public struct SuperDictateMemoryRecoveryEvent: Codable, Equatable, Sendable, Ide
             throw SuperDictateMemoryRecoveryJournalError.invalidMetadata
         }
         let path = relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard Self.isSafeRelativePath(path),
-              path.hasPrefix("audio/\(source.rawValue)/") else {
+        let canonicalPath = SuperDictateMemoryAudioChunk.canonicalRelativePath(
+            source: source,
+            sequence: sequence,
+            chunkID: chunkID,
+            container: container
+        )
+        guard path == canonicalPath else {
             throw SuperDictateMemoryRecoveryJournalError.invalidRelativePath(relativePath)
         }
 
@@ -124,16 +129,6 @@ public struct SuperDictateMemoryRecoveryEvent: Codable, Equatable, Sendable, Ide
             byteLength: container.decode(Int64.self, forKey: .byteLength),
             createdAt: container.decode(Date.self, forKey: .createdAt)
         )
-    }
-
-    private static func isSafeRelativePath(_ path: String) -> Bool {
-        guard !path.isEmpty,
-              !path.hasPrefix("/"),
-              !path.contains("\\") else { return false }
-        let components = path.split(separator: "/", omittingEmptySubsequences: false)
-        return !components.isEmpty && components.allSatisfy {
-            !$0.isEmpty && $0 != "." && $0 != ".."
-        }
     }
 }
 
