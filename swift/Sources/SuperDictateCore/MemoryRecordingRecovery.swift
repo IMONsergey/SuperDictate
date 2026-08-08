@@ -40,6 +40,7 @@ public enum SuperDictateMemoryRecoveryError: Error, Equatable, Sendable {
     case unsafeFileType(String)
     case invalidContainer(String)
     case byteLengthMismatch(path: String, expected: Int64, actual: Int64)
+    case fileOperationFailed(String)
     case posix(Int32)
 }
 
@@ -74,7 +75,10 @@ public actor SuperDictateMemoryPackageRecovery {
             recordingID: recordingID,
             ignoredPartialJournalTail: journal.ignoredPartialTailLine
         )
-        var needsAttention = journal.ignoredPartialTailLine
+        // A torn final JSONL append is expected crash fallout. If every source
+        // file and manifest descriptor is healthy, report `recovered`, not an
+        // alarming integrity failure.
+        var needsAttention = false
 
         let packageURL = await store.packageURL(recordingID: recordingID)
         let quarantineURL = await store.quarantineDirectory(recordingID: recordingID)
@@ -84,7 +88,7 @@ public actor SuperDictateMemoryPackageRecovery {
         for chunk in manifest.chunks {
             referencedRelativePaths.insert(chunk.relativePath)
             let url = packageURL.appendingPathComponent(chunk.relativePath, isDirectory: false)
-            guard fileManager.fileExists(atPath: url.path) else {
+            guard try pathEntryExists(url) else {
                 result.missingChunkIDs.append(chunk.id)
                 needsAttention = true
                 continue
@@ -108,11 +112,11 @@ public actor SuperDictateMemoryPackageRecovery {
                     continue
                 }
             } catch {
-                if !result.quarantinedFileNames.contains(where: { $0.contains(chunk.id.uuidString.lowercased()) }) {
-                    result.quarantinedFileNames.append(
-                        try quarantine(url, into: quarantineURL)
-                    )
-                }
+                // `lstat` above means even a broken symlink reaches this branch;
+                // move the suspicious directory entry itself without following it.
+                result.quarantinedFileNames.append(
+                    try quarantine(url, into: quarantineURL)
+                )
                 needsAttention = true
             }
         }
@@ -227,7 +231,7 @@ public actor SuperDictateMemoryPackageRecovery {
                 message: recoveryIssueMessage(result)
             )
             result.state = .needsAttention
-        } else if !result.recoveredChunkIDs.isEmpty {
+        } else if !result.recoveredChunkIDs.isEmpty || result.ignoredPartialJournalTail {
             result.state = .recovered
         } else {
             result.state = .valid
@@ -258,11 +262,29 @@ public actor SuperDictateMemoryPackageRecovery {
             : "Memory Capture source requires integrity review (\(facts.joined(separator: ", ")))."
     }
 
+    private func pathEntryExists(_ url: URL) throws -> Bool {
+        var st = stat()
+        if Darwin.lstat(url.path, &st) == 0 {
+            return true
+        }
+        if errno == ENOENT {
+            return false
+        }
+        throw SuperDictateMemoryRecoveryError.posix(errno)
+    }
+
     private func sourceFiles(_ directory: URL) throws -> [URL] {
-        guard fileManager.fileExists(atPath: directory.path) else { return [] }
+        guard try pathEntryExists(directory) else { return [] }
+        var st = stat()
+        guard Darwin.lstat(directory.path, &st) == 0 else {
+            throw SuperDictateMemoryRecoveryError.posix(errno)
+        }
+        guard (st.st_mode & S_IFMT) == S_IFDIR else {
+            throw SuperDictateMemoryRecoveryError.unsafeFileType(directory.lastPathComponent)
+        }
         return try fileManager.contentsOfDirectory(
             at: directory,
-            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
+            includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
         )
         .sorted { $0.lastPathComponent < $1.lastPathComponent }
@@ -276,7 +298,9 @@ public actor SuperDictateMemoryPackageRecovery {
         do {
             try fileManager.moveItem(at: url, to: destination)
         } catch {
-            throw SuperDictateMemoryRecoveryError.posix(errno)
+            throw SuperDictateMemoryRecoveryError.fileOperationFailed(
+                error.localizedDescription
+            )
         }
         try synchronizeDirectory(directory)
         return destination.lastPathComponent
