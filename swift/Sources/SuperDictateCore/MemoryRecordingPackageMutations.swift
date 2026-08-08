@@ -56,3 +56,21 @@ public extension JSONSuperDictateMemoryPackageStore {
         return manifest
     }
 }
+
+/// Internal integrity-only mutation used by Core recovery. Unlike the public
+/// operational attention transition, this may downgrade a previously-ready
+/// package when the physical source bytes are later found missing/corrupt.
+extension JSONSuperDictateMemoryPackageStore {
+    @discardableResult
+    func markIntegrityNeedsAttention(
+        recordingID: UUID,
+        message: String
+    ) throws -> SuperDictateMemoryRecordingManifest {
+        guard var manifest = try loadManifest(recordingID: recordingID) else {
+            throw SuperDictateMemoryPackageStoreError.packageMissing(recordingID)
+        }
+        try manifest.markIntegrityNeedsAttention(message)
+        try saveManifest(manifest)
+        return manifest
+    }
+}
