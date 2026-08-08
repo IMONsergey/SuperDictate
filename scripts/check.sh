@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 bash -n install.sh uninstall.sh scripts/build-app.sh scripts/check.sh
-plutil -lint swift/Info.plist entitlements.plist
+plutil -lint swift/Info.plist entitlements.plist design/superdictate.tokens.json
 
 app_version="$(plutil -extract CFBundleShortVersionString raw -o - swift/Info.plist)"
 installer_version="$(sed -n 's/^RELEASE_VERSION="\([^"]*\)"$/\1/p' install.sh)"
@@ -38,6 +38,11 @@ grep -q 'sysctl.proc_translated' install.sh
 grep -q 'is_apple_silicon' install.sh
 grep -q 'Restarting the build natively for Apple Silicon' scripts/build-app.sh
 grep -q 'validate_output_app_path "$OUTPUT_APP"' scripts/build-app.sh
+
+grep -q '"primaryDestinations": \["today", "library", "tasks", "ask"\]' design/superdictate.tokens.json
+grep -q 'Capture is an action, not a destination' docs/DESIGN_SYSTEM_V2.md
+grep -q 'SuperDictateCore' swift/Package.swift
+grep -q 'SuperDictateUI' swift/Package.swift
 
 git diff --check
 printf 'SuperDictate checks passed (v%s).\n' "$app_version"
