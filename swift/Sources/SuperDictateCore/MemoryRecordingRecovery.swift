@@ -85,14 +85,16 @@ public actor SuperDictateMemoryPackageRecovery {
 
         // First validate every chunk the manifest already claims as durable.
         var referencedRelativePaths: Set<String> = []
+        var observedRecoveryRelativePaths: Set<String> = []
         for chunk in manifest.chunks {
             referencedRelativePaths.insert(chunk.relativePath)
             let url = packageURL.appendingPathComponent(chunk.relativePath, isDirectory: false)
             guard try pathEntryExists(url) else {
-                result.missingChunkIDs.append(chunk.id)
+                appendUnique(chunk.id, to: &result.missingChunkIDs)
                 needsAttention = true
                 continue
             }
+            observedRecoveryRelativePaths.insert(chunk.relativePath)
 
             do {
                 let inspection = try inspectCAF(url)
@@ -104,7 +106,7 @@ public actor SuperDictateMemoryPackageRecovery {
                     )
                 }
                 guard inspection.sha256 == chunk.sha256 else {
-                    result.checksumMismatchChunkIDs.append(chunk.id)
+                    appendUnique(chunk.id, to: &result.checksumMismatchChunkIDs)
                     result.quarantinedFileNames.append(
                         try quarantine(url, into: quarantineURL)
                     )
@@ -132,6 +134,13 @@ public actor SuperDictateMemoryPackageRecovery {
             let sourceDirectory = await store.audioDirectory(recordingID: recordingID, source: source)
             for url in try sourceFiles(sourceDirectory) {
                 let relativePath = "audio/\(source.rawValue)/\(url.lastPathComponent)"
+                if url.pathExtension == "partial" {
+                    let finalRelativePath = String(relativePath.dropLast(".partial".count))
+                    observedRecoveryRelativePaths.insert(finalRelativePath)
+                } else {
+                    observedRecoveryRelativePaths.insert(relativePath)
+                }
+
                 if referencedRelativePaths.contains(relativePath) {
                     continue
                 }
@@ -190,7 +199,7 @@ public actor SuperDictateMemoryPackageRecovery {
                         chunk: descriptor
                     )
                     referencedRelativePaths.insert(relativePath)
-                    result.recoveredChunkIDs.append(event.chunkID)
+                    appendUnique(event.chunkID, to: &result.recoveredChunkIDs)
 
                     // Close a stale prepared event after successful manifest repair.
                     if event.kind == .chunkPrepared,
@@ -218,6 +227,15 @@ public actor SuperDictateMemoryPackageRecovery {
                     needsAttention = true
                 }
             }
+        }
+
+        // A durable journal event is itself evidence that source bytes existed.
+        // If neither the manifest nor a partial/final file accounts for its path,
+        // report the source as missing instead of silently forgetting the event.
+        for event in latestJournalByPath.values {
+            guard !observedRecoveryRelativePaths.contains(event.relativePath) else { continue }
+            appendUnique(event.chunkID, to: &result.missingChunkIDs)
+            needsAttention = true
         }
 
         result.missingChunkIDs.sort { $0.uuidString < $1.uuidString }
@@ -260,6 +278,12 @@ public actor SuperDictateMemoryPackageRecovery {
         return facts.isEmpty
             ? "Memory Capture source requires integrity review."
             : "Memory Capture source requires integrity review (\(facts.joined(separator: ", ")))."
+    }
+
+    private func appendUnique(_ id: UUID, to values: inout [UUID]) {
+        if !values.contains(id) {
+            values.append(id)
+        }
     }
 
     private func pathEntryExists(_ url: URL) throws -> Bool {
