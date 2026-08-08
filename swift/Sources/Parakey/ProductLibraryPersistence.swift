@@ -8,9 +8,12 @@ struct ProductLegacyHistoryValue: Sendable {
 
 /// The background agent is the only durable Library writer.
 ///
-/// Calls are fire-and-forget from the runtime main actor. All file I/O is
-/// serialized by one actor so dictation completion never waits on Library work.
+/// Calls are fire-and-forget from the runtime main actor. Commands carry a
+/// monotonic revision so an older detached task can never undo a newer privacy
+/// decision such as History = Off.
 enum ProductLibraryPersistence {
+    @MainActor private static var commandRevision: UInt64 = 0
+
     @MainActor
     static func scheduleLegacyHistoryMerge(_ values: [ProductLegacyHistoryValue]) {
         guard !values.isEmpty else { return }
@@ -22,10 +25,12 @@ enum ProductLibraryPersistence {
                 transcriptionDurationSeconds: $0.transcriptionDurationSeconds
             )
         }
+        let revision = nextRevision()
 
         Task.detached(priority: .utility) {
-            await ProductLibraryPersistenceWorker.shared.merge(
-                entries,
+            await ProductLibraryPersistenceWorker.shared.submit(
+                .merge(entries),
+                revision: revision,
                 rootDirectory: rootDirectory
             )
         }
@@ -34,11 +39,20 @@ enum ProductLibraryPersistence {
     @MainActor
     static func scheduleClear() {
         guard let rootDirectory = resolvedRootDirectory() else { return }
+        let revision = nextRevision()
         Task.detached(priority: .utility) {
-            await ProductLibraryPersistenceWorker.shared.clear(
+            await ProductLibraryPersistenceWorker.shared.submit(
+                .clear,
+                revision: revision,
                 rootDirectory: rootDirectory
             )
         }
+    }
+
+    @MainActor
+    private static func nextRevision() -> UInt64 {
+        commandRevision &+= 1
+        return commandRevision
     }
 
     @MainActor
@@ -53,41 +67,83 @@ enum ProductLibraryPersistence {
 }
 
 private actor ProductLibraryPersistenceWorker {
+    enum Operation: Sendable {
+        case merge([SuperDictateLegacyHistoryEntry])
+        case clear
+    }
+
+    private struct PendingOperation: Sendable {
+        let operation: Operation
+        let revision: UInt64
+        let rootDirectory: URL
+    }
+
     static let shared = ProductLibraryPersistenceWorker()
 
     private var store: JSONSuperDictateLibraryStore?
     private var storeRootDirectory: URL?
+    private var latestRevision: UInt64 = 0
+    private var pendingOperation: PendingOperation?
+    private var isProcessing = false
 
-    func merge(
-        _ entries: [SuperDictateLegacyHistoryEntry],
+    /// Coalesces commands to the newest revision and keeps exactly one I/O loop.
+    /// Actor reentrancy is intentional: a newer command may replace `pendingOperation`
+    /// while the current load/save awaits the Library store actor.
+    func submit(
+        _ operation: Operation,
+        revision: UInt64,
         rootDirectory: URL
     ) async {
-        guard !entries.isEmpty else { return }
+        guard revision > latestRevision else { return }
+        latestRevision = revision
+        pendingOperation = PendingOperation(
+            operation: operation,
+            revision: revision,
+            rootDirectory: rootDirectory
+        )
 
-        do {
-            let store = try libraryStore(rootDirectory: rootDirectory)
-            let archive = try await store.load()
-            let result = SuperDictateLegacyLibraryMerger.merge(entries, into: archive)
-            guard result.changed else { return }
-            try await store.save(result.archive)
-            log(
-                "product Library merged legacy history "
-                + "(recordings=\(result.addedRecordingCount), documents=\(result.addedDocumentCount))"
-            )
-        } catch {
-            // Library indexing is secondary to successful dictation. Failure here
-            // must never turn an inserted transcript into a failed dictation.
-            log("product Library merge failed: \(error.localizedDescription)")
+        guard !isProcessing else { return }
+        isProcessing = true
+        defer { isProcessing = false }
+
+        while let pending = pendingOperation {
+            pendingOperation = nil
+            await process(pending)
         }
     }
 
-    func clear(rootDirectory: URL) async {
+    private func process(_ pending: PendingOperation) async {
         do {
-            let store = try libraryStore(rootDirectory: rootDirectory)
-            try await store.save(SuperDictateLibraryArchive())
-            log("product Library cleared because transcript history is disabled")
+            let store = try libraryStore(rootDirectory: pending.rootDirectory)
+
+            switch pending.operation {
+            case .merge(let entries):
+                guard !entries.isEmpty else { return }
+                let archive = try await store.load()
+
+                // A newer command arrived while the read was in flight. Do not
+                // let this stale projection write after the newer privacy state.
+                guard pending.revision == latestRevision else { return }
+
+                let result = SuperDictateLegacyLibraryMerger.merge(entries, into: archive)
+                guard result.changed else { return }
+                guard pending.revision == latestRevision else { return }
+
+                try await store.save(result.archive)
+                log(
+                    "product Library merged legacy history "
+                    + "(recordings=\(result.addedRecordingCount), documents=\(result.addedDocumentCount))"
+                )
+
+            case .clear:
+                guard pending.revision == latestRevision else { return }
+                try await store.save(SuperDictateLibraryArchive())
+                log("product Library cleared because transcript history is disabled")
+            }
         } catch {
-            log("product Library clear failed: \(error.localizedDescription)")
+            // Library indexing is secondary to successful dictation. Failure here
+            // must never turn an inserted transcript into a failed dictation.
+            log("product Library persistence failed: \(error.localizedDescription)")
         }
     }
 
