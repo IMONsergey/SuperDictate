@@ -48,11 +48,13 @@ public enum SuperDictateSettingsUpdateState: Equatable, Sendable {
     case failed(message: String)
 }
 
-/// Product-level retention choices intentionally mirror the current runtime's
-/// bounded transcript-history contract. Keeping the enum in Core gives the native
-/// Settings UI a typed control instead of a boolean plus a free-form label that
-/// can drift out of sync.
-public enum SuperDictateHistoryRetention: String, Codable, CaseIterable, Sendable, Identifiable {
+/// Mirrors the current runtime `RecentTranscriptLimit` exactly.
+///
+/// Numeric values control only how many rows appear in the quick recent-history
+/// surface. They are *not* durable retention caps: while history is enabled the
+/// runtime can keep a larger local archive/Library. `.off` is the one stronger
+/// privacy state — it disables transcript history and clears the local archive.
+public enum SuperDictateRecentTranscriptMode: String, Codable, CaseIterable, Sendable, Identifiable {
     case off
     case last1 = "1"
     case last5 = "5"
@@ -60,7 +62,7 @@ public enum SuperDictateHistoryRetention: String, Codable, CaseIterable, Sendabl
 
     public var id: String { rawValue }
 
-    public var maximumEntryCount: Int {
+    public var visibleEntryCount: Int {
         switch self {
         case .off: return 0
         case .last1: return 1
@@ -71,11 +73,7 @@ public enum SuperDictateHistoryRetention: String, Codable, CaseIterable, Sendabl
 }
 
 /// User-facing projection of the existing runtime settings and service state.
-///
-/// This is deliberately not a second persistence model. The legacy/runtime
-/// settings object remains authoritative while Settings v2 is migrated. This
-/// snapshot contains only concepts the native Settings window is allowed to
-/// display; diagnostic implementation details stay behind System Status.
+/// This is deliberately not a second persistence model.
 public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
     public var primaryShortcut: String
     public var alternateShortcut: String?
@@ -88,7 +86,7 @@ public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
     public var speechModelDetail: String?
     public var speechModelReady: Bool
 
-    public var historyRetention: SuperDictateHistoryRetention
+    public var recentTranscriptMode: SuperDictateRecentTranscriptMode
     public var libraryRecordingCount: Int
 
     public var serviceState: SuperDictateServiceState
@@ -106,7 +104,7 @@ public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
         speechModelName: String,
         speechModelDetail: String? = nil,
         speechModelReady: Bool,
-        historyRetention: SuperDictateHistoryRetention,
+        recentTranscriptMode: SuperDictateRecentTranscriptMode,
         libraryRecordingCount: Int,
         serviceState: SuperDictateServiceState,
         permissions: [SuperDictatePermissionStatus],
@@ -122,7 +120,7 @@ public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
         self.speechModelName = speechModelName
         self.speechModelDetail = Self.nonEmpty(speechModelDetail)
         self.speechModelReady = speechModelReady
-        self.historyRetention = historyRetention
+        self.recentTranscriptMode = recentTranscriptMode
         self.libraryRecordingCount = max(0, libraryRecordingCount)
         self.serviceState = serviceState
         self.permissions = permissions
@@ -131,7 +129,7 @@ public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
     }
 
     public var historyEnabled: Bool {
-        historyRetention != .off
+        recentTranscriptMode != .off
     }
 
     public var missingPermissions: [SuperDictatePermissionStatus] {
@@ -153,9 +151,9 @@ public enum SuperDictateSettingsCommand: Equatable, Sendable {
     case editShortcuts
     case setRemoveFillerWords(Bool)
     case openModelManager
-    case setHistoryRetention(SuperDictateHistoryRetention)
-    /// Explicit transcript-history deletion. The agent must clear both the
-    /// bounded recent cache and the durable Library so the next migration cannot
+    case setRecentTranscriptMode(SuperDictateRecentTranscriptMode)
+    /// Explicit transcript-history deletion. The agent must clear both its
+    /// bounded recent cache and the durable Library so migration cannot
     /// immediately recreate data the user just asked to remove.
     case clearTranscriptHistory
     case openPermission(SuperDictatePermissionKind)
