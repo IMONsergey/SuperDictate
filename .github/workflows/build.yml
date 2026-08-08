@@ -18,7 +18,7 @@ jobs:
       - name: Swift self-tests
         run: swift run -c debug --package-path swift Parakey --self-test all
       - name: Product core tests
-        run: swift test -c debug --package-path swift --filter ProductStateTests
+        run: swift test -c debug --package-path swift
       - name: Build app bundle
         run: ./scripts/build-app.sh "$RUNNER_TEMP/SuperDictate.app"
       - name: Verify app bundle
