@@ -62,7 +62,8 @@ extension ProductStateTests {
             )
             try manifest.appendFinalizedChunk(microphone)
             try manifest.appendFinalizedChunk(system)
-            manifest.state = .ready
+            try manifest.beginFinalization()
+            try manifest.markReady()
 
             try await store.saveManifest(manifest)
             let maybeLoaded = try await store.loadManifest(recordingID: id)
