@@ -9767,6 +9767,18 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         settings.hasActiveRunMarker = true
         restoreUpdateReminderPause()
         history = settings.recentTranscriptEntries
+        if settings.recentTranscriptLimit == .off {
+            ProductLibraryPersistence.scheduleClear()
+        } else {
+            ProductLibraryPersistence.scheduleLegacyHistoryMerge(
+                history.map {
+                    ProductLegacyHistoryValue(
+                        text: $0.text,
+                        transcriptionDurationSeconds: $0.transcriptionDurationSeconds
+                    )
+                }
+            )
+        }
         importDictationUsageFromLogIfNeeded()
 
         refreshActivationPolicy()
@@ -12007,17 +12019,26 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard next != history else { return }
         history = next
         settings.recentTranscriptEntries = history
+        ProductLibraryPersistence.scheduleLegacyHistoryMerge(
+            history.map {
+                ProductLegacyHistoryValue(
+                    text: $0.text,
+                    transcriptionDurationSeconds: $0.transcriptionDurationSeconds
+                )
+            }
+        )
         if rebuildMenuAfterPersisting {
             rebuildMenu()
         }
     }
 
     private func applyRecentTranscriptLimit() {
-        guard settings.recentTranscriptLimit == .off, !history.isEmpty else { return }
+        guard settings.recentTranscriptLimit == .off else { return }
         let removed = history.count
         history.removeAll()
         settings.recentTranscriptEntries = []
-        log("recent transcript history disabled and cleared (\(removed) entries)")
+        ProductLibraryPersistence.scheduleClear()
+        log("recent transcript history disabled and Library clear scheduled (\(removed) cached entries)")
     }
 
     /// 60-char preview with ellipsis. Newlines collapsed so a multi-
