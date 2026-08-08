@@ -81,18 +81,24 @@ public struct SuperDictateMemoryAudioChunk: Identifiable, Codable, Equatable, Se
         sha256: String
     ) throws {
         let path = relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard Self.isSafeRelativePath(path) else {
+        guard sequence >= 0,
+              sessionStartMilliseconds >= 0,
+              sessionEndMilliseconds >= sessionStartMilliseconds else {
+            throw SuperDictateMemoryManifestError.invalidTiming
+        }
+        guard Self.isSafeRelativePath(path),
+              path == Self.canonicalRelativePath(
+                  source: source,
+                  sequence: sequence,
+                  chunkID: id,
+                  container: container
+              ) else {
             throw SuperDictateMemoryManifestError.invalidChunkPath(relativePath)
         }
         let digest = sha256.lowercased()
         guard digest.count == 64,
               digest.allSatisfy({ $0.isHexDigit && !$0.isUppercase }) else {
             throw SuperDictateMemoryManifestError.invalidSHA256(sha256)
-        }
-        guard sequence >= 0,
-              sessionStartMilliseconds >= 0,
-              sessionEndMilliseconds >= sessionStartMilliseconds else {
-            throw SuperDictateMemoryManifestError.invalidTiming
         }
         guard sampleRate > 0,
               channelCount == 1 || channelCount == 2 else {
@@ -132,6 +138,16 @@ public struct SuperDictateMemoryAudioChunk: Identifiable, Codable, Equatable, Se
             byteLength: container.decode(Int64.self, forKey: .byteLength),
             sha256: container.decode(String.self, forKey: .sha256)
         )
+    }
+
+    public static func canonicalRelativePath(
+        source: SuperDictateMemoryAudioSource,
+        sequence: Int,
+        chunkID: UUID,
+        container: SuperDictateMemoryAudioContainer = .caf
+    ) -> String {
+        let sequenceText = String(format: "%06d", max(0, sequence))
+        return "audio/\(source.rawValue)/\(sequenceText)__\(chunkID.uuidString.lowercased()).\(container.rawValue)"
     }
 
     private static func isSafeRelativePath(_ path: String) -> Bool {
