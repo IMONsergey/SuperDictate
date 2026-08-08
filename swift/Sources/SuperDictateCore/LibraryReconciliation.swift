@@ -26,40 +26,27 @@ public struct SuperDictateLibraryReconciliationResult: Equatable, Sendable {
 /// Combines volatile runtime state with the durable Library without treating the
 /// bounded recent-history cache as authoritative storage.
 ///
-/// Rules:
-/// - durable recordings/tasks/documents are never removed because they are absent
-///   from the live runtime snapshot;
-/// - a live recording that does not exist durably is appended;
-/// - richer durable metadata wins over poorer live/legacy metadata;
-/// - live `requiresAttention` is overlaid for matching records because it is
-///   operational state, not durable content;
-/// - missing evidence documents are created from the reconciled recording;
-/// - runtime status/issue state remains live while recordings/tasks come from the
-///   reconciled durable archive.
+/// Durable content and presentation state are deliberately separated:
+/// - absence from the bounded live cache is never a delete signal;
+/// - genuinely new live recordings may be appended to the durable archive;
+/// - existing durable metadata is never downgraded by a lossy live projection;
+/// - live operational state (status, issue text, `requiresAttention`) is applied
+///   only to the returned presentation snapshot and is never persisted here;
+/// - missing evidence documents are created from durable recording content.
 public enum SuperDictateLibraryReconciler {
     public static func reconcile(
         archive: SuperDictateLibraryArchive,
         liveSnapshot: SuperDictateProductSnapshot
     ) -> SuperDictateLibraryReconciliationResult {
         var next = archive
-        var indexByID: [UUID: Int] = Dictionary(
-            uniqueKeysWithValues: next.recordings.enumerated().map { ($0.element.id, $0.offset) }
-        )
+        var durableIDs = Set(next.recordings.map(\.id))
         var documentIDs = Set(next.memoryDocuments.map(\.recordingID))
         var addedRecordings = 0
         var addedDocuments = 0
 
-        for live in liveSnapshot.recordings {
-            if let index = indexByID[live.id] {
-                next.recordings[index] = mergedDurableRecording(
-                    durable: next.recordings[index],
-                    live: live
-                )
-            } else {
-                indexByID[live.id] = next.recordings.count
-                next.recordings.append(live)
-                addedRecordings += 1
-            }
+        for live in liveSnapshot.recordings where durableIDs.insert(live.id).inserted {
+            next.recordings.append(durableProjection(from: live))
+            addedRecordings += 1
         }
 
         for recording in next.recordings {
@@ -68,10 +55,38 @@ public enum SuperDictateLibraryReconciler {
             addedDocuments += 1
         }
 
+        let durableByID = Dictionary(
+            uniqueKeysWithValues: next.recordings.map { ($0.id, $0) }
+        )
+        var visibleRecordings: [SuperDictateRecording] = []
+        var visibleIDs: Set<UUID> = []
+
+        // Keep the bounded live order at the front (important for legacy rows
+        // without source dates), but source durable metadata for matching IDs.
+        for live in liveSnapshot.recordings {
+            guard visibleIDs.insert(live.id).inserted else { continue }
+            if let durable = durableByID[live.id] {
+                visibleRecordings.append(
+                    presentationRecording(durable: durable, live: live)
+                )
+            } else {
+                visibleRecordings.append(live)
+            }
+        }
+
+        // Durable rows that aged out of recent history remain visible after the
+        // current live slice. Their source audio lifecycle is managed elsewhere.
+        for durable in next.recordings where visibleIDs.insert(durable.id).inserted {
+            visibleRecordings.append(durable)
+        }
+
         let snapshot = SuperDictateProductSnapshot(
             status: liveSnapshot.status,
-            recordings: next.recordings,
-            tasks: next.tasks,
+            recordings: visibleRecordings,
+            tasks: presentationTasks(
+                durable: next.tasks,
+                live: liveSnapshot.tasks
+            ),
             activeRecordingStartedAt: liveSnapshot.activeRecordingStartedAt,
             issueMessage: liveSnapshot.issueMessage
         )
@@ -84,7 +99,22 @@ public enum SuperDictateLibraryReconciler {
         )
     }
 
-    private static func mergedDurableRecording(
+    private static func durableProjection(
+        from live: SuperDictateRecording
+    ) -> SuperDictateRecording {
+        SuperDictateRecording(
+            id: live.id,
+            title: live.title,
+            transcript: live.transcript,
+            summary: live.summary,
+            createdAt: live.createdAt,
+            durationSeconds: live.durationSeconds,
+            people: live.people,
+            requiresAttention: false
+        )
+    }
+
+    private static func presentationRecording(
         durable: SuperDictateRecording,
         live: SuperDictateRecording
     ) -> SuperDictateRecording {
@@ -96,8 +126,23 @@ public enum SuperDictateLibraryReconciler {
             createdAt: durable.createdAt ?? live.createdAt,
             durationSeconds: durable.durationSeconds ?? live.durationSeconds,
             people: durable.people.isEmpty ? live.people : durable.people,
-            requiresAttention: live.requiresAttention
+            requiresAttention: durable.requiresAttention || live.requiresAttention
         )
+    }
+
+    private static func presentationTasks(
+        durable: [SuperDictateTask],
+        live: [SuperDictateTask]
+    ) -> [SuperDictateTask] {
+        var liveByID = Dictionary(uniqueKeysWithValues: live.map { ($0.id, $0) })
+        var result = durable.map { durableTask in
+            liveByID.removeValue(forKey: durableTask.id) ?? durableTask
+        }
+        var seen = Set(result.map(\.id))
+        for task in live where seen.insert(task.id).inserted {
+            result.append(task)
+        }
+        return result
     }
 
     private static func preferredText(_ durable: String, fallback live: String) -> String {
