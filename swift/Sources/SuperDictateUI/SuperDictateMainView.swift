@@ -3,6 +3,7 @@ import SuperDictateCore
 
 public struct SuperDictateMainView: View {
     private let snapshot: SuperDictateProductSnapshot
+    private let language: SuperDictateInterfaceLanguage
     private let onCommand: (SuperDictateCommand) -> Void
 
     @State private var destination: SuperDictateDestination = .today
@@ -11,9 +12,11 @@ public struct SuperDictateMainView: View {
 
     public init(
         snapshot: SuperDictateProductSnapshot,
+        language: SuperDictateInterfaceLanguage = .english,
         onCommand: @escaping (SuperDictateCommand) -> Void = { _ in }
     ) {
         self.snapshot = snapshot
+        self.language = language
         self.onCommand = onCommand
     }
 
@@ -30,26 +33,36 @@ public struct SuperDictateMainView: View {
                 .background(SuperDictateDesign.ColorRole.canvas)
         }
         .frame(minWidth: 840, minHeight: 600)
+        .environment(\.locale, interfaceLocale)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if snapshot.status == .needsAttention {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(SuperDictateDesign.ColorRole.warning)
-                        .help(snapshot.issueMessage ?? "SuperDictate needs attention")
+                        .help(snapshot.issueMessage ?? copy.needsAttention)
                 }
 
                 Button {
                     onCommand(snapshot.primaryCaptureCommand)
                 } label: {
                     Label(
-                        snapshot.isCaptureActive ? "Stop" : "Record",
+                        snapshot.isCaptureActive ? copy.stop : copy.record,
                         systemImage: snapshot.isCaptureActive ? "stop.fill" : "waveform"
                     )
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
-                .help(snapshot.isCaptureActive ? "Stop recording" : "Start recording")
+                .help(snapshot.isCaptureActive ? copy.stopRecordingHelp : copy.startRecordingHelp)
+                .disabled(!snapshot.isPrimaryCaptureCommandEnabled)
             }
         }
+    }
+
+    private var copy: SuperDictateCopy {
+        SuperDictateCopy(language: language)
+    }
+
+    private var interfaceLocale: Locale {
+        language == .russian ? Locale(identifier: "ru_RU") : Locale(identifier: "en_US")
     }
 
     private var sidebar: some View {
@@ -60,7 +73,7 @@ public struct SuperDictateMainView: View {
                         destination = item
                         selectedRecordingID = nil
                     } label: {
-                        Label(item.title, systemImage: item.symbolName)
+                        Label(item.title(copy: copy), systemImage: item.symbolName)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                     }
@@ -77,7 +90,7 @@ public struct SuperDictateMainView: View {
             Button {
                 onCommand(.openSettings)
             } label: {
-                Label("Settings", systemImage: "gearshape")
+                Label(copy.settings, systemImage: "gearshape")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
             }
@@ -94,6 +107,7 @@ public struct SuperDictateMainView: View {
                 recording: selectedRecording,
                 tasks: snapshot.tasks.filter { $0.sourceRecordingID == selectedRecording.id },
                 section: $recordingSection,
+                copy: copy,
                 onClose: { selectedRecordingID = nil },
                 onCommand: onCommand
             )
@@ -102,15 +116,16 @@ public struct SuperDictateMainView: View {
             case .today:
                 TodayView(
                     snapshot: snapshot,
+                    copy: copy,
                     openRecording: openRecording,
                     onCommand: onCommand
                 )
             case .library:
-                LibraryView(recordings: snapshot.recordings, openRecording: openRecording)
+                LibraryView(recordings: snapshot.recordings, copy: copy, openRecording: openRecording)
             case .tasks:
-                TasksView(tasks: snapshot.tasks, onCommand: onCommand)
+                TasksView(tasks: snapshot.tasks, copy: copy, onCommand: onCommand)
             case .ask:
-                AskView()
+                AskView(copy: copy)
             }
         }
     }
@@ -129,6 +144,7 @@ public struct SuperDictateMainView: View {
 
 private struct TodayView: View {
     let snapshot: SuperDictateProductSnapshot
+    let copy: SuperDictateCopy
     let openRecording: (SuperDictateRecording) -> Void
     let onCommand: (SuperDictateCommand) -> Void
 
@@ -136,7 +152,7 @@ private struct TodayView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: SuperDictateDesign.Spacing.section) {
                 VStack(alignment: .leading, spacing: SuperDictateDesign.Spacing.inline) {
-                    Text("Today")
+                    Text(copy.today)
                         .font(SuperDictateDesign.TypeStyle.display)
                     Text(todaySubtitle)
                         .font(SuperDictateDesign.TypeStyle.body)
@@ -144,17 +160,17 @@ private struct TodayView: View {
                 }
 
                 if snapshot.isCaptureActive {
-                    RecordingNowRow(startedAt: snapshot.activeRecordingStartedAt)
+                    RecordingNowRow(startedAt: snapshot.activeRecordingStartedAt, copy: copy)
                 } else if snapshot.status == .transcribing {
-                    ProcessingRow()
+                    ProcessingRow(copy: copy)
                 } else if let issue = snapshot.issueMessage {
                     AttentionRow(message: issue)
                 } else if snapshot.recordings.isEmpty && snapshot.tasks.isEmpty {
-                    EmptyTodayView(onRecord: { onCommand(.startRecording) })
+                    EmptyTodayView(copy: copy, onRecord: { onCommand(.startRecording) })
                 }
 
                 if !snapshot.attentionRecordings.isEmpty {
-                    DocumentSection(title: "Needs attention") {
+                    DocumentSection(title: copy.sectionNeedsAttention) {
                         ForEach(snapshot.attentionRecordings) { recording in
                             RecordingRow(recording: recording, action: { openRecording(recording) })
                         }
@@ -162,7 +178,7 @@ private struct TodayView: View {
                 }
 
                 if !snapshot.actionableTasks.isEmpty {
-                    DocumentSection(title: "Tasks") {
+                    DocumentSection(title: copy.tasks) {
                         ForEach(snapshot.actionableTasks.prefix(5)) { task in
                             TaskRow(task: task, onToggle: { onCommand(.toggleTask(task.id)) })
                         }
@@ -170,7 +186,7 @@ private struct TodayView: View {
                 }
 
                 if !snapshot.recentRecordings.isEmpty {
-                    DocumentSection(title: "Recent") {
+                    DocumentSection(title: copy.sectionRecent) {
                         ForEach(snapshot.recentRecordings) { recording in
                             RecordingRow(recording: recording, action: { openRecording(recording) })
                         }
@@ -180,30 +196,31 @@ private struct TodayView: View {
             .padding(SuperDictateDesign.Spacing.contentGutter)
             .superDictateReadableDocument()
         }
-        .navigationTitle("Today")
+        .navigationTitle(copy.today)
     }
 
     private var todaySubtitle: String {
         switch snapshot.status {
-        case .recording: return "Recording locally."
-        case .transcribing: return "Turning your latest recording into text."
-        case .needsAttention: return "One item needs your attention."
-        case .idle, .ready: return "Record something or continue where you left off."
+        case .recording: return copy.recordingLocally
+        case .transcribing: return copy.transcribingLatest
+        case .needsAttention: return copy.attentionSubtitle
+        case .idle, .ready: return copy.todayDefaultSubtitle
         }
     }
 }
 
 private struct LibraryView: View {
     let recordings: [SuperDictateRecording]
+    let copy: SuperDictateCopy
     let openRecording: (SuperDictateRecording) -> Void
 
     var body: some View {
         Group {
             if recordings.isEmpty {
                 ContentUnavailableView(
-                    "No recordings yet",
+                    copy.noRecordings,
                     systemImage: "waveform",
-                    description: Text("Your dictations and captured conversations will appear here.")
+                    description: Text(copy.noRecordingsDetail)
                 )
             } else {
                 List(recordings) { recording in
@@ -211,21 +228,22 @@ private struct LibraryView: View {
                 }
             }
         }
-        .navigationTitle("Library")
+        .navigationTitle(copy.library)
     }
 }
 
 private struct TasksView: View {
     let tasks: [SuperDictateTask]
+    let copy: SuperDictateCopy
     let onCommand: (SuperDictateCommand) -> Void
 
     var body: some View {
         Group {
             if tasks.isEmpty {
                 ContentUnavailableView(
-                    "No tasks",
+                    copy.noTasks,
                     systemImage: "checkmark.circle",
-                    description: Text("Verified actions from recordings will appear here.")
+                    description: Text(copy.noTasksDetail)
                 )
             } else {
                 List(tasks) { task in
@@ -233,18 +251,20 @@ private struct TasksView: View {
                 }
             }
         }
-        .navigationTitle("Tasks")
+        .navigationTitle(copy.tasks)
     }
 }
 
 private struct AskView: View {
+    let copy: SuperDictateCopy
+
     var body: some View {
         ContentUnavailableView(
-            "Ask is not connected yet",
+            copy.askUnavailable,
             systemImage: "text.bubble",
-            description: Text("This surface will ship only with evidence-backed answers and source citations. No fake chat UI in the meantime.")
+            description: Text(copy.askUnavailableDetail)
         )
-        .navigationTitle("Ask")
+        .navigationTitle(copy.ask)
     }
 }
 
@@ -252,6 +272,7 @@ private struct RecordingDetailView: View {
     let recording: SuperDictateRecording
     let tasks: [SuperDictateTask]
     @Binding var section: SuperDictateRecordingSection
+    let copy: SuperDictateCopy
     let onClose: () -> Void
     let onCommand: (SuperDictateCommand) -> Void
 
@@ -260,7 +281,7 @@ private struct RecordingDetailView: View {
             VStack(alignment: .leading, spacing: SuperDictateDesign.Spacing.section) {
                 VStack(alignment: .leading, spacing: SuperDictateDesign.Spacing.compact) {
                     Button(action: onClose) {
-                        Label("Back", systemImage: "chevron.left")
+                        Label(copy.back, systemImage: "chevron.left")
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(SuperDictateDesign.ColorRole.textSecondary)
@@ -284,9 +305,9 @@ private struct RecordingDetailView: View {
                     .foregroundStyle(SuperDictateDesign.ColorRole.textSecondary)
                 }
 
-                Picker("View", selection: $section) {
+                Picker(copy.view, selection: $section) {
                     ForEach(SuperDictateRecordingSection.allCases) { item in
-                        Text(item.title).tag(item)
+                        Text(item.title(copy: copy)).tag(item)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -299,10 +320,10 @@ private struct RecordingDetailView: View {
                         .lineSpacing(5)
                         .textSelection(.enabled)
                 case .transcript:
-                    TranscriptDocument(text: recording.transcript)
+                    TranscriptDocument(text: recording.transcript, copy: copy)
                 case .tasks:
                     if tasks.isEmpty {
-                        Text("No verified tasks from this recording.")
+                        Text(copy.noVerifiedTasks)
                             .font(SuperDictateDesign.TypeStyle.body)
                             .foregroundStyle(SuperDictateDesign.ColorRole.textSecondary)
                     } else {
@@ -321,7 +342,7 @@ private struct RecordingDetailView: View {
                 Button {
                     onCommand(.copyTranscript(recording.id))
                 } label: {
-                    Label("Copy transcript", systemImage: "doc.on.doc")
+                    Label(copy.copyTranscript, systemImage: "doc.on.doc")
                 }
             }
         }
@@ -330,7 +351,7 @@ private struct RecordingDetailView: View {
     private var summaryText: String {
         guard let summary = recording.summary?.trimmingCharacters(in: .whitespacesAndNewlines),
               !summary.isEmpty else {
-            return "No summary yet."
+            return copy.noSummary
         }
         return summary
     }
@@ -338,10 +359,11 @@ private struct RecordingDetailView: View {
 
 private struct TranscriptDocument: View {
     let text: String
+    let copy: SuperDictateCopy
 
     var body: some View {
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            Text("No transcript yet.")
+            Text(copy.noTranscript)
                 .foregroundStyle(SuperDictateDesign.ColorRole.textSecondary)
         } else {
             Text(text)
@@ -437,6 +459,7 @@ private struct TaskRow: View {
 
 private struct RecordingNowRow: View {
     let startedAt: Date?
+    let copy: SuperDictateCopy
 
     var body: some View {
         HStack(spacing: SuperDictateDesign.Spacing.compact) {
@@ -444,7 +467,7 @@ private struct RecordingNowRow: View {
                 .fill(SuperDictateDesign.ColorRole.recording)
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: SuperDictateDesign.Spacing.micro) {
-                Text("Recording")
+                Text(copy.recording)
                     .font(SuperDictateDesign.TypeStyle.interfaceMedium)
                 if let startedAt {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -456,16 +479,18 @@ private struct RecordingNowRow: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Recording in progress")
+        .accessibilityLabel(copy.recordingAccessibility)
     }
 }
 
 private struct ProcessingRow: View {
+    let copy: SuperDictateCopy
+
     var body: some View {
         HStack(spacing: SuperDictateDesign.Spacing.compact) {
             ProgressView()
                 .controlSize(.small)
-            Text("Transcribing latest recording…")
+            Text(copy.processingLatest)
                 .font(SuperDictateDesign.TypeStyle.interface)
         }
     }
@@ -482,13 +507,14 @@ private struct AttentionRow: View {
 }
 
 private struct EmptyTodayView: View {
+    let copy: SuperDictateCopy
     let onRecord: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: SuperDictateDesign.Spacing.component) {
-            Text("Nothing needs your attention.")
+            Text(copy.noAttention)
                 .font(SuperDictateDesign.TypeStyle.heading)
-            Button("Start recording", action: onRecord)
+            Button(copy.startRecording, action: onRecord)
                 .buttonStyle(.borderedProminent)
         }
     }
@@ -506,12 +532,12 @@ private func durationLabel(_ seconds: TimeInterval) -> String {
 }
 
 private extension SuperDictateDestination {
-    var title: String {
+    func title(copy: SuperDictateCopy) -> String {
         switch self {
-        case .today: return "Today"
-        case .library: return "Library"
-        case .tasks: return "Tasks"
-        case .ask: return "Ask"
+        case .today: return copy.today
+        case .library: return copy.library
+        case .tasks: return copy.tasks
+        case .ask: return copy.ask
         }
     }
 
@@ -526,11 +552,11 @@ private extension SuperDictateDestination {
 }
 
 private extension SuperDictateRecordingSection {
-    var title: String {
+    func title(copy: SuperDictateCopy) -> String {
         switch self {
-        case .summary: return "Summary"
-        case .transcript: return "Transcript"
-        case .tasks: return "Tasks"
+        case .summary: return copy.summary
+        case .transcript: return copy.transcript
+        case .tasks: return copy.tasks
         }
     }
 }
