@@ -93,4 +93,15 @@ extension ProductStateTests {
             .clearTranscriptHistory
         )
     }
+
+    func testUpdaterInstallationStatePreservesVersionAndRuntimePhase() {
+        let state = SuperDictateSettingsUpdateState.installing(
+            version: "0.3.0",
+            phase: "Verifying archive"
+        )
+        XCTAssertEqual(
+            state,
+            .installing(version: "0.3.0", phase: "Verifying archive")
+        )
+    }
 }
