@@ -11,8 +11,11 @@ public struct SuperDictateMemoryChunkPolicy: Equatable, Sendable {
         partialSuffix: String = "partial"
     ) {
         self.maximumChunkBytes = max(1, maximumChunkBytes)
-        let normalizedSuffix = partialSuffix.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.partialSuffix = normalizedSuffix.isEmpty ? "partial" : normalizedSuffix
+        let normalized = partialSuffix.trimmingCharacters(in: .whitespacesAndNewlines)
+        let safe = !normalized.isEmpty && normalized.allSatisfy {
+            $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_"
+        }
+        self.partialSuffix = safe ? normalized : "partial"
     }
 }
 
@@ -189,8 +192,9 @@ public actor SuperDictateMemoryAudioChunkCommitter {
         }
 
         var magic = [UInt8](repeating: 0, count: 4)
-        let magicCount = magic.withUnsafeMutableBytes { bytes in
-            Darwin.pread(fd, bytes.baseAddress, bytes.count, 0)
+        let magicCount: Int = magic.withUnsafeMutableBytes { bytes in
+            guard let baseAddress = bytes.baseAddress else { return -1 }
+            return Darwin.pread(fd, baseAddress, bytes.count, 0)
         }
         guard magicCount == 4,
               magic == Array("caff".utf8) else {
@@ -272,7 +276,8 @@ public actor SuperDictateMemoryAudioChunkCommitter {
         chunkID: UUID,
         partialSuffix: String
     ) -> String {
-        String(format: "%06d__%@.caf.%@", sequence, chunkID.uuidString.lowercased(), partialSuffix)
+        let sequenceText = String(format: "%06d", sequence)
+        return "\(sequenceText)__\(chunkID.uuidString.lowercased()).caf.\(partialSuffix)"
     }
 
     private static func finalizedURL(from temporaryURL: URL, partialSuffix: String) -> URL {
