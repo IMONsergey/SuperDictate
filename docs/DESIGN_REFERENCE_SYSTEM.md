@@ -1,170 +1,191 @@
 # SuperDictate Design Reference System
 
-Status: active design contract for the macOS workbench, native clients, and web
-preview.
+Status: active reference index.
 
-Last source review: 2026-07-30.
+Last source review: 2026-08-08.
 
-Detailed research:
+The normative visual and interaction contract is now:
+
+- [DESIGN_SYSTEM_V2.md](DESIGN_SYSTEM_V2.md)
+- [`design/superdictate.tokens.json`](../design/superdictate.tokens.json)
+
+Supporting research:
 
 - [NATIVE_DESIGN_RESEARCH.md](NATIVE_DESIGN_RESEARCH.md)
 - [POCKET_ALTERNATIVE_PRODUCT_RESEARCH.md](POCKET_ALTERNATIVE_PRODUCT_RESEARCH.md)
 
-## Product Design Verdict
+## Product design verdict
 
-SuperDictate must feel like a real local-first Mac utility and a native
-cross-platform capture product, not a web dashboard. The product target is an
-app-only alternative to Pocket / HeyPocket AI: capture conversations anywhere,
-process them locally first where possible, and turn them into trusted memory and
-follow-through.
+SuperDictate should be technically deep and visually quiet.
 
-The product loop is:
+The product is not a dashboard and must not expose its architecture as its interface. It is a native local-first capture and memory utility whose default loop is:
 
-Capture -> process -> review -> execute -> remember.
+```text
+Record -> receive useful text -> review only when needed -> act
+```
 
-Everything else exists to support that path: model choice, recovery, storage,
-privacy, hotkeys, evidence links, tasks, calendar, Ask, export, and advanced
-inspection.
+Long-form conversation intelligence remains part of the product, but it is progressively disclosed rather than presented as a permanent multi-panel workbench.
 
-## Source Of Truth
+## Source hierarchy
 
-- Apple Human Interface Guidelines:
-  https://developer.apple.com/design/human-interface-guidelines/
-- Apple Design Resources:
-  https://developer.apple.com/design/resources/
-- Apple Style Guide:
-  https://help.apple.com/applestyleguide/
-- SF Symbols:
-  https://developer.apple.com/sf-symbols/
+1. Apple Human Interface Guidelines and native macOS behavior.
+2. SuperDictate Design System v2 and semantic tokens.
+3. Accessibility and task clarity.
+4. OpenAI Apps SDK UI design-system architecture and visual restraint.
+5. Pocket / HeyPocket interaction simplicity.
+6. Other product references.
 
-Use official Apple platform patterns first: toolbar, sidebar, inspector,
-settings, menus, keyboard shortcuts, focus rings, system typography, semantic
-colors, accessibility labels, and adaptive layouts.
+Primary sources:
 
-## Product References
+- Apple HIG: https://developer.apple.com/design/human-interface-guidelines/
+- Apple macOS guidance: https://developer.apple.com/design/human-interface-guidelines/designing-for-macos/
+- Apple sidebars: https://developer.apple.com/design/human-interface-guidelines/sidebars
+- Apple typography: https://developer.apple.com/design/human-interface-guidelines/typography
+- Apple color: https://developer.apple.com/design/human-interface-guidelines/color
+- OpenAI Apps SDK UI: https://github.com/openai/apps-sdk-ui
+- OpenAI design guidance: https://openai.com/brand/
+- Pocket: https://heypocket.com/
+- Pocket docs: https://docs.heypocketai.com/docs
 
-- CodeEdit: https://github.com/CodeEditApp/CodeEdit
-  - Borrow: Mac-native workbench structure, welcome window thinking, toolbar
-    density, and reusable SwiftUI window packages.
-  - Avoid: building a code-editor-shaped app. SuperDictate is a recorder and
-    transcript workbench.
-- CotEditor: https://github.com/coteditor/CotEditor
-  - Borrow: restraint, text-editor quality, familiar macOS controls, keyboard
-    behavior, localization, and accessibility.
-  - Avoid: burying recording and AI workflow under generic editor chrome.
-- NetNewsWire: https://github.com/Ranchero-Software/NetNewsWire
-  - Borrow: sidebar hierarchy, reading comfort, multi-window Mac behavior, empty
-    states, and keyboard navigation.
-  - Avoid: feed-reader information architecture.
-- IceCubesApp: https://github.com/Dimillian/IceCubesApp
-  - Borrow: multiplatform SwiftUI navigation, sidebar adaptation, draft-like
-    persistence, cached state, and live updates.
-  - Avoid: social-client density and feed-first composition.
-- Pindrop: https://github.com/watzon/pindrop
-  - Borrow: local dictation posture, model browser, hotkeys, output modes,
-    transcript history, custom dictionary, and first-run model setup.
-  - Avoid: menu-bar-only product scope. SuperDictate also needs a full workbench.
+## What we take from OpenAI
 
-## Technology References
+Use the architecture and restraint, not OpenAI branding.
 
-- Argmax OSS Swift: https://github.com/argmaxinc/argmax-oss-swift
-  - Borrow for Apple Silicon direction: WhisperKit, SpeakerKit, TTSKit, and
-    local speech AI package boundaries.
-- KeyboardShortcuts: https://github.com/sindresorhus/KeyboardShortcuts
-  - Borrow for user-configurable global shortcuts and settings UI.
-- Sparkle: https://github.com/sparkle-project/Sparkle
-  - Borrow for native update trust, beta channels, and quiet first-launch
-    behavior once distribution begins.
-- Fluent UI Apple tokens:
-  https://github.com/microsoft/fluentui-apple/wiki/Design-Tokens
-  - Borrow only the token hierarchy idea: global tokens, semantic alias tokens,
-    and control tokens. Do not copy Fluent's visual style.
+Borrow:
 
-## Non-Negotiable Interface Rules
+- primitive -> semantic -> component token hierarchy;
+- semantic text/surface/border/action/status roles;
+- small number of typography weights;
+- generous whitespace;
+- short actionable copy;
+- minimal component chrome;
+- dark-mode-aware semantic tokens;
+- accessibility as a design-system responsibility.
 
-1. No raw JSON as a primary product surface. Technical data belongs in disclosure
-   sections and inspector details.
-2. No fake controls. Every visible control must either work or be explicitly
-   marked as preview/runtime-unavailable.
-3. No marketing landing page. The first screen is the usable recorder/workbench.
-4. No colored card soup. Use native hierarchy, typography, separators, and
-   system materials before decorative cards.
-5. No hidden model choice. The active model, recommendation, installed state,
-   size, speed, privacy mode, and download state must be visible.
-6. No surprise cloud. Local/open-source/free is default; cloud or paid providers
-   require explicit opt-in and clear copy.
-7. No destructive ambiguity. Delete, crash simulation, model removal, and reset
-   actions must use destructive styling and confirmation where data can be lost.
+Do not copy:
 
-## Native Information Architecture
+- OpenAI/ChatGPT logos or wordmarks;
+- OpenAI product naming;
+- OpenAI Sans as SuperDictate's bundled product font;
+- distinctive ChatGPT branding that could imply affiliation.
 
-### First Launch
+## What we take from Pocket
 
-- Microphone permission
-- Local model selection and download
-- Optional global hotkey setup
-- Storage location and privacy explanation
-- Start recording
+Pocket is useful primarily as a complexity benchmark.
 
-### Main Mac Window
+Borrow:
 
-- Sidebar: Today, Capture, Library, Tasks, Ask, People, Models, Settings
-- Toolbar: record, stop, lens selector, model selector, search, export, share
-- Center: capture surface, recording detail, transcript/editor, speaker
-  segments, timeline, AI review, mind map, task checklist
-- Inspector: active model, local runtime, processing state, evidence, exports,
-  recovery, provenance, technical details
+- one clear purpose per screen;
+- summary rendered like a document;
+- tasks rendered like a checklist;
+- Ask rendered like one simple conversation;
+- language/template choices rendered as searchable lists;
+- one-action recording behavior;
+- automatic outputs after capture without mandatory pre-configuration.
 
-### Menu Bar
+Improve:
 
-- Current recording state
-- Quick record and stop
-- Push-to-talk status
-- Last transcript copy/export actions
-- Open workbench
+- no hardware dependency;
+- better desktop keyboard/hotkey ergonomics;
+- local-first processing and ownership;
+- source/evidence links;
+- first-class export;
+- stronger recovery transparency;
+- native Mac integration.
+
+## Revised native information architecture
+
+### Main sidebar
+
+Only four default primary destinations:
+
+- Today
+- Library
+- Tasks
+- Ask
+
+`Capture` is a global action, not navigation.
+
+`Summary`, `Transcript`, and recording-specific tasks live inside Recording Detail.
+
+`People` is a Library filter/entity view.
+
+`Models`, privacy, storage, updates and diagnostics live in Settings.
+
+### Main toolbar
+
+Default toolbar contains only:
+
+- sidebar toggle;
+- current view title;
+- search when relevant;
+- record control;
+- compact contextual share/export/more actions.
+
+Never place the following in default primary chrome:
+
+- model selector;
+- runtime/debug status pill;
+- five-step processing strip;
+- JSON actions;
+- lens inventory;
+- recovery internals.
+
+### Recording detail
+
+The reading surface has three primary modes:
+
+- Summary
+- Transcript
+- Tasks
+
+The detail should resemble a clean document more than a dashboard.
+
+`Ask this recording` opens Ask with the recording preselected as scope.
+
+An inspector may appear on demand for metadata, model/provenance and advanced detail, but is not permanently open by default.
 
 ### Settings
 
+- General
+- Recording & Hotkeys
 - Models
-- Recording
-- Hotkeys
-- Output and export
-- Local AI cleanup and summaries
-- Storage and recovery
-- Privacy
-- Updates
+- Language & Text
+- Storage & Privacy
+- Export & Integrations
+- Updates, where edition permits
+- Advanced / Diagnostics
 
-## Visual System Rules
+## Non-negotiable rules
 
-- Typography: SF Pro/Text for interface and transcript, SF Mono only for
-  timestamps, checksums, logs, and code-like metadata.
-- Spacing: 4 pt rhythm, with 8/12/16/24/32 pt as the common scale.
-- Radius: controls follow platform defaults; custom cards stay at 8 pt or less.
-- Color: system neutrals as the base, Apple blue for primary action, green for
-  verified/local, amber for warning, red for destructive. Do not let the app
-  become one-hue blue, purple, beige, or dark-slate.
-- Icons: SF Symbols or a native icon library only. Use text labels where the
-  action is unfamiliar.
-- Motion: subtle state transitions for recording, processing, and completion.
-  No decorative motion that competes with transcript reading.
-- Density: Mac is information-dense but calm; iPhone/watch surfaces are capture
-  and review only.
+1. Native components before custom replicas.
+2. System typography on Apple platforms.
+3. Semantic colors before hard-coded colors.
+4. One visually dominant action per primary surface.
+5. Healthy technical state stays quiet.
+6. Cloud/network transitions are explicit.
+7. No decorative `AI` color language.
+8. No card grids for information that can be a list or document.
+9. No fake controls.
+10. No marketing hero in the application.
+11. No permanent inspector unless the user chooses to keep it open.
+12. No OpenAI or Pocket visual cloning.
 
-## Immediate Repair Backlog
+## Current implementation verdict
 
-1. Reframe the product around Today, Capture, Library, AI Review, Tasks, Ask,
-   People, Models, and Settings.
-2. Add a real model manager:
-   Recommended for this Mac, installed, needs download, source, size, speed,
-   accuracy, language support, privacy mode, and actions.
-3. Make demo mode exercise the full product loop:
-   capture, processing, transcript, evidence-backed summary, decisions, risks,
-   tasks, calendar scheduling, Ask, model choice, recovery, and export.
-4. Replace recovery JSON-first UI with human recovery states and a technical
-   details disclosure.
-5. Add lens selector, Ask scope chips, speaker/person management, mind map
-   preview, and task evidence links to the web preview before rebuilding the
-   native shell.
-6. Build the native SwiftUI workbench shell from this information architecture.
-7. Keep the web preview aligned with the native workbench until the native Intel
-   build is stable enough for daily testing.
+PR #19 (`feature/pocket-workbench-interface`) is useful as a functional experiment but is not the target UI.
+
+Its persistent top controls, workflow strip, large feature sidebar, Lens panel, Session panel, dashboard cards and three-column workbench violate the new design contract. It should be treated as a behavior inventory and superseded by a lightweight interface implementation rather than polished in place.
+
+## Immediate implementation backlog
+
+1. Keep `design/superdictate.tokens.json` as the machine-readable token source.
+2. Build platform adapters for tokens rather than scattering color/spacing literals.
+3. Rebuild the web preview around Today / Library / Tasks / Ask so the information architecture can be validated quickly.
+4. Replace the web dashboard home with a simple actionable list.
+5. Replace the permanent workflow strip with contextual processing status.
+6. Replace the permanent lens/session/model panels with menus, settings and disclosure.
+7. Rebuild native SwiftUI navigation with `NavigationSplitView`, native toolbar and Settings.
+8. Rebuild recording detail around Summary / Transcript / Tasks.
+9. Apply the same token semantics to the recording HUD.
+10. Validate light, dark, increased-contrast and Reduce Motion behavior before visual polish.
