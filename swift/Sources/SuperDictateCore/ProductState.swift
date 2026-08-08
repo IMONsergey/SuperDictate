@@ -171,5 +171,6 @@ public enum SuperDictateCommand: Equatable, Sendable {
     case copyTranscript(UUID)
     case toggleTask(UUID)
     case openSettings
+    case openSystemStatus
     case retryAttentionItem(UUID)
 }
