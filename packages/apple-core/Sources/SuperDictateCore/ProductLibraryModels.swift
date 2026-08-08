@@ -1,6 +1,6 @@
 import Foundation
 
-public enum SuperDictateLibraryItemState: String, Codable, CaseIterable, Sendable {
+public enum SuperDictateLibraryItemState: String, Codable, CaseIterable, Hashable, Sendable {
     case recording
     case processing
     case ready
