@@ -31,6 +31,7 @@ public enum SuperDictateMemoryManifestError: Error, Equatable, Sendable {
     case duplicateSequence(source: SuperDictateMemoryAudioSource, sequence: Int)
     case chunkAppendNotAllowed(SuperDictateMemorySessionState)
     case invalidStateTransition(from: SuperDictateMemorySessionState, to: SuperDictateMemorySessionState)
+    case readyWithoutSourceAudio
     case invalidIssueState
 }
 
@@ -236,6 +237,9 @@ public struct SuperDictateMemoryRecordingManifest: Codable, Equatable, Sendable 
                 to: .ready
             )
         }
+        guard !chunks.isEmpty else {
+            throw SuperDictateMemoryManifestError.readyWithoutSourceAudio
+        }
         state = .ready
         issue = nil
     }
@@ -263,15 +267,30 @@ public struct SuperDictateMemoryRecordingManifest: Codable, Equatable, Sendable 
             }
     }
 
+    public var durationMilliseconds: Int64 {
+        chunks.map(\.sessionEndMilliseconds).max() ?? 0
+    }
+
+    public var sources: Set<SuperDictateMemoryAudioSource> {
+        Set(chunks.map(\.source))
+    }
+
     public func validate() throws {
         switch state {
         case .needsAttention:
             guard issue != nil else {
                 throw SuperDictateMemoryManifestError.invalidIssueState
             }
-        case .recording, .finalizing, .ready:
+        case .recording, .finalizing:
             guard issue == nil else {
                 throw SuperDictateMemoryManifestError.invalidIssueState
+            }
+        case .ready:
+            guard issue == nil else {
+                throw SuperDictateMemoryManifestError.invalidIssueState
+            }
+            guard !chunks.isEmpty else {
+                throw SuperDictateMemoryManifestError.readyWithoutSourceAudio
             }
         }
 
