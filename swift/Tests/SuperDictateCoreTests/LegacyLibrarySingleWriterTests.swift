@@ -3,7 +3,7 @@ import XCTest
 @testable import SuperDictateCore
 
 extension ProductStateTests {
-    func testSingleWriterLegacyMergeAddsMissingRecordingAndEvidence() {
+    func testSingleWriterLegacyMergeAddsMissingRecordingAndEvidenceWithoutFakeAudioDuration() {
         let entries = [
             SuperDictateLegacyHistoryEntry(
                 text: "Alpha project decision",
@@ -20,12 +20,34 @@ extension ProductStateTests {
         XCTAssertEqual(result.addedRecordingCount, 1)
         XCTAssertEqual(result.addedDocumentCount, 1)
         XCTAssertEqual(result.archive.recordings.first?.transcript, "Alpha project decision")
-        XCTAssertEqual(result.archive.recordings.first?.durationSeconds, 1.25)
+        XCTAssertNil(result.archive.recordings.first?.durationSeconds)
         XCTAssertNil(result.archive.recordings.first?.createdAt)
         XCTAssertEqual(
             result.archive.memoryDocuments.first?.recordingID,
             result.archive.recordings.first?.id
         )
+    }
+
+    func testSingleWriterMergePreservesRealRuntimeIdentityAndAudioDuration() throws {
+        let id = UUID()
+        let createdAt = Date(timeIntervalSince1970: 123)
+        let result = SuperDictateLegacyLibraryMerger.merge(
+            [
+                SuperDictateLegacyHistoryEntry(
+                    text: "New metadata row",
+                    transcriptionDurationSeconds: 0.4,
+                    recordingID: id,
+                    createdAt: createdAt,
+                    sourceAudioDurationSeconds: 8.75
+                )
+            ],
+            into: SuperDictateLibraryArchive()
+        )
+
+        let recording = try XCTUnwrap(result.archive.recordings.first)
+        XCTAssertEqual(recording.id, id)
+        XCTAssertEqual(recording.createdAt, createdAt)
+        XCTAssertEqual(recording.durationSeconds, 8.75)
     }
 
     func testSingleWriterLegacyMergeIsIdempotent() {
