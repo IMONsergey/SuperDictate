@@ -17,23 +17,16 @@ func makeSuperDictateSettingsSnapshot(
 ) -> SuperDictateSettingsSnapshot {
     let missingPermissionNames = Set(agentState?.missingPermissions ?? [])
     let permissions: [SuperDictatePermissionStatus] = [
-        permissionStatus(
-            kind: .microphone,
-            runtimeName: Permission.microphone.rawValue,
-            missingPermissionNames: missingPermissionNames
-        ),
-        permissionStatus(
-            kind: .accessibility,
-            runtimeName: Permission.accessibility.rawValue,
-            missingPermissionNames: missingPermissionNames
-        ),
-        permissionStatus(
-            kind: .inputMonitoring,
-            runtimeName: Permission.inputMonitoring.rawValue,
-            missingPermissionNames: missingPermissionNames
-        ),
+        permissionStatus(kind: .microphone,
+                         runtimeName: Permission.microphone.rawValue,
+                         missingPermissionNames: missingPermissionNames),
+        permissionStatus(kind: .accessibility,
+                         runtimeName: Permission.accessibility.rawValue,
+                         missingPermissionNames: missingPermissionNames),
+        permissionStatus(kind: .inputMonitoring,
+                         runtimeName: Permission.inputMonitoring.rawValue,
+                         missingPermissionNames: missingPermissionNames),
     ]
-
     let profile = settings.speechModelProfile
 
     return SuperDictateSettingsSnapshot(
@@ -48,7 +41,7 @@ func makeSuperDictateSettingsSnapshot(
         speechModelName: profile.shortName,
         speechModelDetail: profile.aboutModelText,
         speechModelReady: agentState?.speechModelReady ?? false,
-        historyRetention: productHistoryRetention(settings.recentTranscriptLimit),
+        recentTranscriptMode: productRecentTranscriptMode(settings.recentTranscriptLimit),
         libraryRecordingCount: inputs.libraryRecordingCount,
         serviceState: productServiceState(agentState: agentState, agentRunning: agentRunning),
         permissions: permissions,
@@ -57,7 +50,7 @@ func makeSuperDictateSettingsSnapshot(
     )
 }
 
-func productHistoryRetention(_ limit: RecentTranscriptLimit) -> SuperDictateHistoryRetention {
+func productRecentTranscriptMode(_ limit: RecentTranscriptLimit) -> SuperDictateRecentTranscriptMode {
     switch limit {
     case .off: return .off
     case .last1: return .last1
@@ -66,8 +59,8 @@ func productHistoryRetention(_ limit: RecentTranscriptLimit) -> SuperDictateHist
     }
 }
 
-func runtimeHistoryRetention(_ retention: SuperDictateHistoryRetention) -> RecentTranscriptLimit {
-    switch retention {
+func runtimeRecentTranscriptLimit(_ mode: SuperDictateRecentTranscriptMode) -> RecentTranscriptLimit {
+    switch mode {
     case .off: return .off
     case .last1: return .last1
     case .last5: return .last5
@@ -94,15 +87,10 @@ private func productServiceState(
     guard let agentState else { return .starting }
 
     switch agentState.status {
-    case "ready", "recording", "transcribing":
-        return .running
-    case "starting":
-        return .starting
-    case "stopped":
-        return .stopped
-    case "error", "needs_permissions", "stopping":
-        return .needsAttention
-    default:
-        return agentState.isReady ? .running : .starting
+    case "ready", "recording", "transcribing": return .running
+    case "starting": return .starting
+    case "stopped": return .stopped
+    case "error", "needs_permissions", "stopping": return .needsAttention
+    default: return agentState.isReady ? .running : .starting
     }
 }
