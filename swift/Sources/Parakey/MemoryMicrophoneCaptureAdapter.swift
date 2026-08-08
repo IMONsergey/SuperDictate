@@ -6,6 +6,7 @@ private enum MemoryMicrophoneCaptureFailure: Error, Equatable, Sendable {
     case alreadyStarted
     case invalidInputChannelCount(Int)
     case invalidInputFormat
+    case invalidHostTime
     case pcmCopyFailed
     case streamBackpressure
     case writerFailed
@@ -31,39 +32,6 @@ private final class MemoryMicrophoneFailureBox: @unchecked Sendable {
     }
 }
 
-private final class MemoryMicrophoneTimeline: @unchecked Sendable {
-    private let lock = NSLock()
-    private var firstSampleTime: AVAudioFramePosition?
-    private var fallbackFramePosition: Int64 = 0
-
-    func startMilliseconds(
-        when: AVAudioTime,
-        frameCount: Int,
-        sampleRate: Double
-    ) -> Int64 {
-        lock.lock()
-        defer { lock.unlock() }
-
-        var startFrame = fallbackFramePosition
-        if when.isSampleTimeValid {
-            if firstSampleTime == nil {
-                firstSampleTime = when.sampleTime
-            }
-            if let firstSampleTime {
-                let delta = when.sampleTime - firstSampleTime
-                if delta >= 0 {
-                    startFrame = max(startFrame, Int64(delta))
-                }
-            }
-        }
-        fallbackFramePosition = startFrame + Int64(frameCount)
-        return Int64(
-            (Double(startFrame) / sampleRate * 1_000.0)
-                .rounded()
-        )
-    }
-}
-
 /// Independent long-form microphone source for Memory Capture.
 ///
 /// This intentionally does not reuse or modify Instant Dictation's `AudioCapture`.
@@ -81,6 +49,7 @@ final class MemoryMicrophoneCaptureAdapter {
 
     private let engine: AVAudioEngine
     private let writer: MemoryCAFChunkWriter
+    private let clockAnchor: MemoryCaptureClockAnchor
 
     private var lifecycle: Lifecycle = .idle
     private var continuation: AsyncStream<SuperDictateMemoryPCMBlock>.Continuation?
@@ -91,9 +60,11 @@ final class MemoryMicrophoneCaptureAdapter {
 
     init(
         writer: MemoryCAFChunkWriter,
+        clockAnchor: MemoryCaptureClockAnchor,
         engine: AVAudioEngine = AVAudioEngine()
     ) {
         self.writer = writer
+        self.clockAnchor = clockAnchor
         self.engine = engine
     }
 
@@ -127,7 +98,7 @@ final class MemoryMicrophoneCaptureAdapter {
         let stream = pair.stream
         let continuation = pair.continuation
         let failureBox = MemoryMicrophoneFailureBox()
-        let timeline = MemoryMicrophoneTimeline()
+        let clockAnchor = self.clockAnchor
 
         self.continuation = continuation
         self.failureBox = failureBox
@@ -149,11 +120,22 @@ final class MemoryMicrophoneCaptureAdapter {
             bufferSize: 4_096,
             format: tapFormat
         ) { buffer, when in
-            let startMilliseconds = timeline.startMilliseconds(
-                when: when,
-                frameCount: Int(buffer.frameLength),
-                sampleRate: buffer.format.sampleRate
-            )
+            guard when.isHostTimeValid else {
+                failureBox.record(.invalidHostTime)
+                continuation.finish()
+                return
+            }
+
+            let startMilliseconds: Int64
+            do {
+                startMilliseconds = try clockAnchor.milliseconds(
+                    atHostTime: when.hostTime
+                )
+            } catch {
+                failureBox.record(.invalidHostTime)
+                continuation.finish()
+                return
+            }
 
             let block: SuperDictateMemoryPCMBlock
             do {
@@ -199,9 +181,6 @@ final class MemoryMicrophoneCaptureAdapter {
         }
     }
 
-    /// Stop capture, drain every accepted callback block and finalize the last
-    /// CAF only when the bounded pipeline remained healthy. A second stop after a
-    /// successful finish is idempotent; a failed session remains failed.
     @discardableResult
     func stop() async throws -> [SuperDictateMemoryAudioChunk] {
         switch lifecycle {
