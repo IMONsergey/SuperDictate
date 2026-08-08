@@ -97,14 +97,17 @@ func makeSuperDictateProductSnapshot(
     agentRunning: Bool,
     language: InterfaceLanguage
 ) -> SuperDictateProductSnapshot {
-    // Keep one stable legacy migration algorithm across the bridge and durable
-    // Library. This also preserves the real transcription duration when the old
-    // archive knows it, while continuing to leave unknown source chronology nil.
+    // The same migrator feeds both the volatile live projection and the durable
+    // Library. New rows preserve their runtime UUID/capture metadata from the
+    // first frame; pre-metadata rows retain deterministic legacy fallback IDs.
     let recordings = SuperDictateLegacyHistoryMigrator.recordings(
         from: settings.recentTranscriptEntries.map {
             SuperDictateLegacyHistoryEntry(
                 text: $0.text,
-                transcriptionDurationSeconds: $0.transcriptionDurationSeconds
+                transcriptionDurationSeconds: $0.transcriptionDurationSeconds,
+                recordingID: $0.recordingID,
+                createdAt: $0.createdAt,
+                sourceAudioDurationSeconds: $0.sourceAudioDurationSeconds
             )
         }
     )
