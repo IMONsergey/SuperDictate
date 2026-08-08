@@ -21,6 +21,10 @@ Processing order remains: trim raw ASR output; repair known speech-model artifac
 
 The existing Parakey self-test suite remains unchanged and therefore acts as the runtime compatibility oracle. The complete `SuperDictateCoreTests` suite, release app bundle build, strict codesign verification and installer/uninstaller smoke remain required release gates.
 
+## Clean release gate
+
+The one-shot patch is only a mechanical source-edit mechanism. The release signal is a subsequent ordinary commit on the generated read-only-workflow head, validated again by the complete standard production pipeline.
+
 ## Follow-up cleanup
 
 After this migration has remained green, duplicated legacy implementations (`SpeechModelTextRepair`, `TranscriptCorrector`, `FillerWordRemover`) can be removed from `main.swift` only after their remaining direct self-tests are migrated to Core.
