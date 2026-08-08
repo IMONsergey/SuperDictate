@@ -123,22 +123,32 @@ public struct SuperDictateSettingsView: View {
 
     private var privacySection: some View {
         SettingsGroup {
-            Toggle(
-                text("Сохранять историю диктовок", "Keep dictation history"),
-                isOn: Binding(
-                    get: { snapshot.historyEnabled },
-                    set: { onCommand(.setHistoryEnabled($0)) }
-                )
-            )
-            SettingsValueRow(title: text("Лимит истории", "History limit"),
-                             value: snapshot.historyLimitDescription)
+            HStack {
+                Text(text("Хранить историю", "Keep history"))
+                Spacer()
+                Picker(
+                    "",
+                    selection: Binding(
+                        get: { snapshot.historyRetention },
+                        set: { onCommand(.setHistoryRetention($0)) }
+                    )
+                ) {
+                    ForEach(SuperDictateHistoryRetention.allCases) { retention in
+                        Text(retentionTitle(retention)).tag(retention)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 150)
+            }
+
             SettingsValueRow(title: text("Записей в библиотеке", "Library recordings"),
                              value: String(snapshot.libraryRecordingCount))
 
             Label(
                 text(
-                    "Библиотека и поиск работают локально. Отключение истории скрывает и очищает локальный индекс.",
-                    "Library and search are local. Turning history off hides and clears the local index."
+                    "Библиотека и поиск работают локально. Режим «Не сохранять» очищает recent history и локальный индекс.",
+                    "Library and search are local. Choosing Off clears recent history and the local index."
                 ),
                 systemImage: "lock.shield"
             )
@@ -148,14 +158,14 @@ public struct SuperDictateSettingsView: View {
             Divider()
 
             Button(role: .destructive) {
-                onCommand(.clearLibraryHistory)
+                onCommand(.clearTranscriptHistory)
             } label: {
-                Label(text("Очистить библиотеку…", "Clear Library…"), systemImage: "trash")
+                Label(text("Очистить историю…", "Clear History…"), systemImage: "trash")
             }
-            .disabled(snapshot.libraryRecordingCount == 0)
+            .disabled(!snapshot.historyEnabled && snapshot.libraryRecordingCount == 0)
             .help(text(
-                "Удаляет локальный индекс библиотеки. Это отдельное действие и не выводится из очистки списка недавних.",
-                "Deletes the local Library index. This is explicit and is not inferred from clearing the recent cache."
+                "Удаляет локальный список недавних диктовок и durable Library. Удаление одной строки из recent history не считается удалением из Library.",
+                "Clears both the local recent-dictation cache and durable Library. Removing one recent row is not treated as a Library deletion."
             ))
         }
     }
@@ -247,6 +257,15 @@ public struct SuperDictateSettingsView: View {
         case .starting: return text("Запускается", "Starting")
         case .stopped: return text("Остановлена", "Stopped")
         case .needsAttention: return text("Требует внимания", "Needs attention")
+        }
+    }
+
+    private func retentionTitle(_ retention: SuperDictateHistoryRetention) -> String {
+        switch retention {
+        case .off: return text("Не сохранять", "Off")
+        case .last1: return text("Последняя 1", "Last 1")
+        case .last5: return text("Последние 5", "Last 5")
+        case .last10: return text("Последние 10", "Last 10")
         }
     }
 
