@@ -6,7 +6,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 bash -n install.sh uninstall.sh scripts/build-app.sh scripts/check.sh
-plutil -lint swift/Info.plist entitlements.plist design/superdictate.tokens.json
+plutil -lint swift/Info.plist entitlements.plist
+python3 -m json.tool design/superdictate.tokens.json >/dev/null
 
 app_version="$(plutil -extract CFBundleShortVersionString raw -o - swift/Info.plist)"
 installer_version="$(sed -n 's/^RELEASE_VERSION="\([^"]*\)"$/\1/p' install.sh)"
