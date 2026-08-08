@@ -2,6 +2,7 @@ import Foundation
 
 public enum SuperDictateMemoryPCMBlockError: Error, Equatable, Sendable {
     case invalidSampleRate(Double)
+    case nonIntegralSampleRate(Double)
     case invalidChannelCount(Int)
     case empty
     case inconsistentFrameCount
@@ -29,6 +30,12 @@ public struct SuperDictateMemoryPCMBlock: Equatable, Sendable {
         guard sampleRate.isFinite, sampleRate > 0 else {
             throw SuperDictateMemoryPCMBlockError.invalidSampleRate(sampleRate)
         }
+        // The source manifest stores sampleRate as an integer number of Hz. Do
+        // not silently round a fractional runtime value and persist metadata that
+        // no longer describes the authoritative source bytes.
+        guard abs(sampleRate - sampleRate.rounded()) < 0.000_001 else {
+            throw SuperDictateMemoryPCMBlockError.nonIntegralSampleRate(sampleRate)
+        }
         guard channels.count == 1 || channels.count == 2 else {
             throw SuperDictateMemoryPCMBlockError.invalidChannelCount(channels.count)
         }
@@ -45,7 +52,7 @@ public struct SuperDictateMemoryPCMBlock: Equatable, Sendable {
             throw SuperDictateMemoryPCMBlockError.inconsistentFrameCount
         }
         guard channels.allSatisfy({ channel in
-            channel.allSatisfy(\.isFinite)
+            channel.allSatisfy { $0.isFinite }
         }) else {
             throw SuperDictateMemoryPCMBlockError.nonFiniteSample
         }
@@ -57,6 +64,7 @@ public struct SuperDictateMemoryPCMBlock: Equatable, Sendable {
 
     public var channelCount: Int { channels.count }
     public var frameCount: Int { channels[0].count }
+    public var sampleRateHz: Int { Int(sampleRate.rounded()) }
 
     public var durationMilliseconds: Int64 {
         Int64(
