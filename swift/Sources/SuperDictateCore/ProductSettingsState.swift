@@ -42,7 +42,6 @@ public enum SuperDictateSettingsUpdateState: Equatable, Sendable {
     case checking
     case current(version: String)
     case available(version: String)
-    case installing(version: String, phase: String)
     case failed(message: String)
 }
 
