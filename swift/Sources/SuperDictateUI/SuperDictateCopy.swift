@@ -17,6 +17,8 @@ struct SuperDictateCopy: Sendable {
     var tasks: String { text("Задачи", "Tasks") }
     var ask: String { "Ask" }
     var settings: String { text("Настройки", "Settings") }
+    var systemStatus: String { text("Состояние системы", "System Status") }
+    var more: String { text("Ещё", "More") }
     var record: String { text("Записать", "Record") }
     var stop: String { text("Стоп", "Stop") }
     var back: String { text("Назад", "Back") }
@@ -25,6 +27,9 @@ struct SuperDictateCopy: Sendable {
     var transcript: String { text("Транскрипт", "Transcript") }
     var copyTranscript: String { text("Скопировать транскрипт", "Copy transcript") }
     var needsAttention: String { text("SuperDictate требует внимания", "SuperDictate needs attention") }
+    var openSystemStatus: String {
+        text("Открыть разрешения, службу и обновления", "Open permissions, service, and updates")
+    }
     var stopRecordingHelp: String { text("Остановить запись", "Stop recording") }
     var startRecordingHelp: String { text("Начать запись", "Start recording") }
     var recordingLocally: String { text("Идёт локальная запись.", "Recording locally.") }
