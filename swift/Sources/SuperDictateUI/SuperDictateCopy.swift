@@ -14,6 +14,7 @@ struct SuperDictateCopy: Sendable {
 
     var today: String { text("Сегодня", "Today") }
     var library: String { text("Библиотека", "Library") }
+    var searchLibrary: String { text("Поиск по библиотеке", "Search Library") }
     var tasks: String { text("Задачи", "Tasks") }
     var ask: String { "Ask" }
     var settings: String { text("Настройки", "Settings") }

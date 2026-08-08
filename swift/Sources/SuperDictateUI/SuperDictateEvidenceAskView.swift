@@ -3,12 +3,13 @@ import SuperDictateCore
 
 /// Native Ask surface backed by exact local transcript evidence.
 ///
-/// This intentionally ships retrieval before generative synthesis. It is useful
-/// on its own, works offline, and establishes the product contract that every
-/// future generated answer must be able to jump back to source evidence.
+/// This intentionally ships retrieval before generative synthesis. It works
+/// offline and establishes the contract that every future generated answer must
+/// be able to jump back to source evidence.
 public struct SuperDictateEvidenceAskView: View {
     private let documents: [SuperDictateMemoryDocument]
     private let scopeRecordingIDs: Set<UUID>
+    private let language: SuperDictateInterfaceLanguage
     private let onOpenEvidence: (SuperDictateMemorySearchHit) -> Void
 
     @State private var query = ""
@@ -18,10 +19,12 @@ public struct SuperDictateEvidenceAskView: View {
     public init(
         documents: [SuperDictateMemoryDocument],
         scopeRecordingIDs: Set<UUID> = [],
+        language: SuperDictateInterfaceLanguage = .english,
         onOpenEvidence: @escaping (SuperDictateMemorySearchHit) -> Void = { _ in }
     ) {
         self.documents = documents
         self.scopeRecordingIDs = scopeRecordingIDs
+        self.language = language
         self.onOpenEvidence = onOpenEvidence
     }
 
@@ -43,9 +46,15 @@ public struct SuperDictateEvidenceAskView: View {
         .navigationTitle("Ask")
     }
 
+    private var isRussian: Bool { language == .russian }
+
+    private func t(_ russian: String, _ english: String) -> String {
+        isRussian ? russian : english
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: SuperDictateDesign.Spacing.inline) {
-            Text("Ask your memory")
+            Text(t("Спросите свою память", "Ask your memory"))
                 .font(SuperDictateDesign.TypeStyle.display)
             Text(scopeDescription)
                 .font(SuperDictateDesign.TypeStyle.body)
@@ -57,36 +66,41 @@ public struct SuperDictateEvidenceAskView: View {
     private var resultContent: some View {
         if scopedDocuments.isEmpty {
             ContentUnavailableView(
-                "Nothing to search yet",
+                t("Пока нечего искать", "Nothing to search yet"),
                 systemImage: "text.magnifyingglass",
-                description: Text(
+                description: Text(t(
+                    "Сначала запишите или добавьте разговор. Ask ищет только в локальном исходном тексте и не придумывает отсутствующие факты.",
                     "Record or import a conversation first. Ask searches local source text and does not invent missing memory."
-                )
+                ))
             )
             .frame(maxWidth: .infinity, minHeight: 260)
         } else if submittedQuery.isEmpty {
             VStack(alignment: .leading, spacing: SuperDictateDesign.Spacing.compact) {
-                Text("Search decisions, promises, names, deadlines or topics.")
-                    .font(SuperDictateDesign.TypeStyle.body)
-                    .foregroundStyle(SuperDictateDesign.ColorRole.textSecondary)
+                Text(t(
+                    "Ищите решения, обещания, имена, сроки или темы.",
+                    "Search decisions, promises, names, deadlines or topics."
+                ))
+                .font(SuperDictateDesign.TypeStyle.body)
+                .foregroundStyle(SuperDictateDesign.ColorRole.textSecondary)
 
-                querySuggestion("What did we decide?")
-                querySuggestion("What needs to happen next?")
-                querySuggestion("Find mentions of a client or project")
+                querySuggestion(t("Что мы решили?", "What did we decide?"))
+                querySuggestion(t("Что нужно сделать дальше?", "What needs to happen next?"))
+                querySuggestion(t("Найти упоминания клиента или проекта", "Find mentions of a client or project"))
             }
         } else if hits.isEmpty {
             ContentUnavailableView(
-                "No source evidence found",
+                t("В источниках ничего не найдено", "No source evidence found"),
                 systemImage: "magnifyingglass",
-                description: Text(
+                description: Text(t(
+                    "Попробуйте другие слова или расширьте область поиска. SuperDictate не будет выдумывать ответ, если локальные транскрипты его не подтверждают.",
                     "Try different words or broaden the scope. SuperDictate will not fabricate an answer when the local transcripts do not support one."
-                )
+                ))
             )
             .frame(maxWidth: .infinity, minHeight: 240)
         } else {
             LazyVStack(alignment: .leading, spacing: 0) {
                 HStack {
-                    Text("Source matches")
+                    Text(t("Совпадения в источниках", "Source matches"))
                         .font(SuperDictateDesign.TypeStyle.heading)
                     Spacer()
                     Text("\(hits.count)")
@@ -99,6 +113,7 @@ public struct SuperDictateEvidenceAskView: View {
                     EvidenceResultRow(
                         hit: hit,
                         documentTitle: documentTitle(for: hit.recordingID),
+                        language: language,
                         action: { onOpenEvidence(hit) }
                     )
                     if index < hits.count - 1 {
@@ -112,7 +127,7 @@ public struct SuperDictateEvidenceAskView: View {
     private var composer: some View {
         HStack(alignment: .bottom, spacing: SuperDictateDesign.Spacing.inline) {
             TextField(
-                "Search your recordings",
+                t("Поиск по записям", "Search your recordings"),
                 text: $query,
                 axis: .vertical
             )
@@ -132,7 +147,7 @@ public struct SuperDictateEvidenceAskView: View {
                              ? SuperDictateDesign.ColorRole.actionPrimary
                              : SuperDictateDesign.ColorRole.textTertiary)
             .disabled(!canSubmit)
-            .accessibilityLabel("Search memory")
+            .accessibilityLabel(t("Искать в памяти", "Search memory"))
         }
         .padding(.horizontal, SuperDictateDesign.Spacing.contentGutter)
         .padding(.vertical, SuperDictateDesign.Spacing.compact)
@@ -155,12 +170,21 @@ public struct SuperDictateEvidenceAskView: View {
 
     private var scopeDescription: String {
         if scopeRecordingIDs.count == 1 {
-            return "Searching this recording. Every result links to its exact source segment."
+            return t(
+                "Поиск только по этой записи. Каждый результат ведёт к точному исходному фрагменту.",
+                "Searching this recording. Every result links to its exact source segment."
+            )
         }
         if !scopeRecordingIDs.isEmpty {
-            return "Searching \(scopeRecordingIDs.count) selected recordings. Every result stays source-linked."
+            return t(
+                "Поиск по выбранным записям: \(scopeRecordingIDs.count). Каждый результат остаётся связан с источником.",
+                "Searching \(scopeRecordingIDs.count) selected recordings. Every result stays source-linked."
+            )
         }
-        return "Searching \(documents.count) local recording\(documents.count == 1 ? "" : "s"). No cloud call is required."
+        return t(
+            "Локальный поиск по записям: \(documents.count). Обращение к облаку не требуется.",
+            "Searching \(documents.count) local recording\(documents.count == 1 ? "" : "s"). No cloud call is required."
+        )
     }
 
     private func querySuggestion(_ title: String) -> some View {
@@ -198,13 +222,15 @@ public struct SuperDictateEvidenceAskView: View {
     }
 
     private func documentTitle(for recordingID: UUID) -> String {
-        documents.first { $0.recordingID == recordingID }?.title ?? "Recording"
+        documents.first { $0.recordingID == recordingID }?.title
+            ?? t("Запись", "Recording")
     }
 }
 
 private struct EvidenceResultRow: View {
     let hit: SuperDictateMemorySearchHit
     let documentTitle: String
+    let language: SuperDictateInterfaceLanguage
     let action: () -> Void
 
     var body: some View {
@@ -258,9 +284,13 @@ private struct EvidenceResultRow: View {
 
     private var accessibilityLabel: String {
         if let start = hit.startMilliseconds {
-            return "Open \(documentTitle) at \(formatTimestamp(start))"
+            return language == .russian
+                ? "Открыть \(documentTitle) на \(formatTimestamp(start))"
+                : "Open \(documentTitle) at \(formatTimestamp(start))"
         }
-        return "Open source in \(documentTitle)"
+        return language == .russian
+            ? "Открыть источник в \(documentTitle)"
+            : "Open source in \(documentTitle)"
     }
 }
 

@@ -3,6 +3,7 @@ import SuperDictateCore
 
 public struct SuperDictateMainView: View {
     private let snapshot: SuperDictateProductSnapshot
+    private let memoryDocuments: [SuperDictateMemoryDocument]
     private let language: SuperDictateInterfaceLanguage
     private let onCommand: (SuperDictateCommand) -> Void
 
@@ -12,10 +13,12 @@ public struct SuperDictateMainView: View {
 
     public init(
         snapshot: SuperDictateProductSnapshot,
+        memoryDocuments: [SuperDictateMemoryDocument] = [],
         language: SuperDictateInterfaceLanguage = .english,
         onCommand: @escaping (SuperDictateCommand) -> Void = { _ in }
     ) {
         self.snapshot = snapshot
+        self.memoryDocuments = memoryDocuments
         self.language = language
         self.onCommand = onCommand
     }
@@ -135,11 +138,20 @@ public struct SuperDictateMainView: View {
                     onCommand: onCommand
                 )
             case .library:
-                LibraryView(recordings: snapshot.recordings, copy: copy, openRecording: openRecording)
+                SuperDictateSearchableLibraryView(
+                    recordings: snapshot.recordings,
+                    memoryDocuments: memoryDocuments,
+                    language: language,
+                    onOpenRecording: openRecording
+                )
             case .tasks:
                 TasksView(tasks: snapshot.tasks, copy: copy, onCommand: onCommand)
             case .ask:
-                AskView(copy: copy)
+                SuperDictateEvidenceAskView(
+                    documents: memoryDocuments,
+                    language: language,
+                    onOpenEvidence: openEvidence
+                )
             }
         }
     }
@@ -153,6 +165,15 @@ public struct SuperDictateMainView: View {
         selectedRecordingID = recording.id
         recordingSection = recording.summary?.isEmpty == false ? .summary : .transcript
         onCommand(.openRecording(recording.id))
+    }
+
+    private func openEvidence(_ hit: SuperDictateMemorySearchHit) {
+        guard snapshot.recordings.contains(where: { $0.id == hit.recordingID }) else {
+            return
+        }
+        selectedRecordingID = hit.recordingID
+        recordingSection = .transcript
+        onCommand(.openRecording(hit.recordingID))
     }
 }
 

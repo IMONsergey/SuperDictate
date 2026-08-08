@@ -5,16 +5,24 @@ import SuperDictateUI
 
 /// Owns the visible native product window in the control-panel process.
 ///
-/// The background agent remains the audio/hotkey/ASR engine. This controller
-/// only renders product state and sends narrow commands through the trusted
-/// bridge. The legacy compact panel remains available as System Status during
-/// migration of service/permissions/update controls into Settings v2.
+/// The background agent remains the audio/hotkey/ASR engine. Product content is
+/// backed by the private durable Library index; the legacy rolling history is
+/// only an input for incremental migration until the agent writes the Library
+/// directly on every successful dictation.
 @MainActor
 final class NativeProductWindowController: NSObject, NSWindowDelegate {
     private let model: SuperDictateMainModel
     private let onOpenSettings: @MainActor () -> Void
     private let onOpenSystemStatus: @MainActor () -> Void
     private let onClose: @MainActor () -> Void
+    private let libraryStore: JSONSuperDictateLibraryStore?
+
+    private var runtimeSnapshot: SuperDictateProductSnapshot
+    private var libraryArchive = SuperDictateLibraryArchive()
+    private var libraryLoaded = false
+    private var lastRuntimeRecordingIDs: Set<UUID> = []
+    private var pendingRuntimeRecordings: [SuperDictateRecording]?
+    private var librarySyncTask: Task<Void, Never>?
     private var window: NSWindow?
 
     init(
@@ -25,27 +33,39 @@ final class NativeProductWindowController: NSObject, NSWindowDelegate {
         onClose: @escaping @MainActor () -> Void
     ) {
         model = SuperDictateMainModel(snapshot: initialSnapshot, language: language)
+        runtimeSnapshot = initialSnapshot
         self.onOpenSettings = onOpenSettings
         self.onOpenSystemStatus = onOpenSystemStatus
         self.onClose = onClose
+
+        do {
+            let root = try superDictateApplicationSupportDirectory()
+            libraryStore = try JSONSuperDictateLibraryStore(rootDirectory: root)
+        } catch {
+            libraryStore = nil
+            log("product Library unavailable: \(error.localizedDescription)")
+        }
+
         super.init()
+        scheduleLibrarySync(recordings: initialSnapshot.recordings, forceReload: true)
     }
 
     func show() {
         let window = window ?? makeWindow()
         self.window = window
+        scheduleLibrarySync(recordings: runtimeSnapshot.recordings, forceReload: true)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     func refresh(snapshot: SuperDictateProductSnapshot,
                  language: SuperDictateInterfaceLanguage) {
-        if model.snapshot != snapshot {
-            model.snapshot = snapshot
-        }
+        runtimeSnapshot = snapshot
         if model.language != language {
             model.language = language
         }
+        applyCombinedSnapshot()
+        scheduleLibrarySync(recordings: snapshot.recordings, forceReload: false)
     }
 
     func close() {
@@ -55,6 +75,8 @@ final class NativeProductWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         guard let closingWindow = notification.object as? NSWindow,
               closingWindow === window else { return }
+        librarySyncTask?.cancel()
+        librarySyncTask = nil
         window = nil
         onClose()
     }
@@ -80,6 +102,92 @@ final class NativeProductWindowController: NSObject, NSWindowDelegate {
         return window
     }
 
+    private func applyCombinedSnapshot() {
+        guard libraryLoaded else {
+            if model.snapshot != runtimeSnapshot {
+                model.snapshot = runtimeSnapshot
+            }
+            return
+        }
+
+        let combined = SuperDictateProductSnapshot(
+            status: runtimeSnapshot.status,
+            recordings: libraryArchive.recordings,
+            tasks: libraryArchive.tasks,
+            activeRecordingStartedAt: runtimeSnapshot.activeRecordingStartedAt,
+            issueMessage: runtimeSnapshot.issueMessage
+        )
+        if model.snapshot != combined {
+            model.snapshot = combined
+        }
+        if model.memoryDocuments != libraryArchive.memoryDocuments {
+            model.memoryDocuments = libraryArchive.memoryDocuments
+        }
+    }
+
+    private func scheduleLibrarySync(
+        recordings: [SuperDictateRecording],
+        forceReload: Bool
+    ) {
+        guard let libraryStore else { return }
+
+        let recordingIDs = Set(recordings.map(\.id))
+        guard forceReload || !libraryLoaded || recordingIDs != lastRuntimeRecordingIDs else {
+            return
+        }
+        lastRuntimeRecordingIDs = recordingIDs
+        pendingRuntimeRecordings = recordings
+
+        guard librarySyncTask == nil else { return }
+        librarySyncTask = Task { [weak self] in
+            guard let self else { return }
+
+            do {
+                var archive = try await libraryStore.load()
+                let runtimeRecordings = self.pendingRuntimeRecordings ?? []
+                self.pendingRuntimeRecordings = nil
+
+                var recordingIDs = Set(archive.recordings.map(\.id))
+                var documentIDs = Set(archive.memoryDocuments.map(\.recordingID))
+                var changed = false
+
+                for recording in runtimeRecordings {
+                    if recordingIDs.insert(recording.id).inserted {
+                        archive.recordings.append(recording)
+                        changed = true
+                    }
+                    if documentIDs.insert(recording.id).inserted {
+                        archive.memoryDocuments.append(SuperDictateMemoryDocument(recording: recording))
+                        changed = true
+                    }
+                }
+
+                if changed {
+                    try await libraryStore.save(archive)
+                }
+
+                self.libraryArchive = archive
+                self.libraryLoaded = true
+                self.applyCombinedSnapshot()
+            } catch is CancellationError {
+                self.librarySyncTask = nil
+                return
+            } catch {
+                // Library is a rebuildable private index. A read/write failure
+                // must never stop dictation or hide the runtime fallback state.
+                log("product Library sync failed: \(error.localizedDescription)")
+                self.libraryLoaded = false
+                self.applyCombinedSnapshot()
+            }
+
+            let pending = self.pendingRuntimeRecordings
+            self.librarySyncTask = nil
+            if let pending {
+                self.scheduleLibrarySync(recordings: pending, forceReload: true)
+            }
+        }
+    }
+
     private func handle(_ command: SuperDictateCommand) {
         switch command {
         case .startRecording:
@@ -101,7 +209,8 @@ final class NativeProductWindowController: NSObject, NSWindowDelegate {
             // Navigation is local SwiftUI state; no runtime side effect required.
             break
         case .toggleTask:
-            // Tasks are intentionally absent until evidence-backed task storage exists.
+            // Task mutation will become a durable Library operation once the
+            // evidence-backed task review surface is connected.
             break
         }
     }

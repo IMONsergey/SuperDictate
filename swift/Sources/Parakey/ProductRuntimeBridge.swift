@@ -1,5 +1,4 @@
 import AppKit
-import CryptoKit
 import Foundation
 import SuperDictateCore
 
@@ -98,21 +97,17 @@ func makeSuperDictateProductSnapshot(
     agentRunning: Bool,
     language: InterfaceLanguage
 ) -> SuperDictateProductSnapshot {
-    let entries = settings.recentTranscriptEntries
-    var occurrences: [String: Int] = [:]
-    let recordings = entries.compactMap { entry -> SuperDictateRecording? in
-        let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return nil }
-        let occurrence = occurrences[text, default: 0]
-        occurrences[text] = occurrence + 1
-        return SuperDictateRecording(
-            id: stableProductRecordingID(text: text, occurrence: occurrence),
-            title: productRecordingTitle(text: text, language: language),
-            transcript: text,
-            createdAt: nil,
-            durationSeconds: nil
-        )
-    }
+    // Keep one stable legacy migration algorithm across the bridge and durable
+    // Library. This also preserves the real transcription duration when the old
+    // archive knows it, while continuing to leave unknown source chronology nil.
+    let recordings = SuperDictateLegacyHistoryMigrator.recordings(
+        from: settings.recentTranscriptEntries.map {
+            SuperDictateLegacyHistoryEntry(
+                text: $0.text,
+                transcriptionDurationSeconds: $0.transcriptionDurationSeconds
+            )
+        }
+    )
 
     let status: SuperDictateRuntimeStatus
     let issueMessage: String?
@@ -155,25 +150,4 @@ func makeSuperDictateProductSnapshot(
         activeRecordingStartedAt: nil,
         issueMessage: issueMessage
     )
-}
-
-private func productRecordingTitle(text: String, language: InterfaceLanguage) -> String {
-    let flat = text.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
-    guard !flat.isEmpty else {
-        return localizedText("Без названия", "Untitled", language: language)
-    }
-    return flat.count <= 68 ? flat : String(flat.prefix(67)) + "…"
-}
-
-private func stableProductRecordingID(text: String, occurrence: Int) -> UUID {
-    var hasher = SHA256()
-    hasher.update(data: Data("superdictate-history-v1\u{0}\(occurrence)\u{0}\(text)".utf8))
-    let bytes = Array(hasher.finalize().prefix(16))
-    guard bytes.count == 16 else { return UUID() }
-    return UUID(uuid: (
-        bytes[0], bytes[1], bytes[2], bytes[3],
-        bytes[4], bytes[5], bytes[6], bytes[7],
-        bytes[8], bytes[9], bytes[10], bytes[11],
-        bytes[12], bytes[13], bytes[14], bytes[15]
-    ))
 }
