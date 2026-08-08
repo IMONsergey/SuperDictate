@@ -12,6 +12,7 @@ public enum SuperDictateSettingsSection: String, CaseIterable, Sendable, Identif
 public enum SuperDictatePermissionKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case microphone
     case accessibility
+    case inputMonitoring = "input_monitoring"
 
     public var id: String { rawValue }
 }
