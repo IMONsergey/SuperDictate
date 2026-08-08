@@ -57,7 +57,8 @@ extension ProductStateTests {
         let attributes = try FileManager.default.attributesOfItem(atPath: finalURL.path)
         XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
 
-        let manifest = try XCTUnwrap(try await store.loadManifest(recordingID: recordingID))
+        let maybeManifest = try await store.loadManifest(recordingID: recordingID)
+        let manifest = try XCTUnwrap(maybeManifest)
         XCTAssertEqual(manifest.chunks, [descriptor])
     }
 
@@ -286,7 +287,8 @@ extension ProductStateTests {
         XCTAssertTrue(FileManager.default.fileExists(atPath: orphanURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: secondTemporaryURL.path))
 
-        let manifest = try XCTUnwrap(try await store.loadManifest(recordingID: recordingID))
+        let maybeManifest = try await store.loadManifest(recordingID: recordingID)
+        let manifest = try XCTUnwrap(maybeManifest)
         XCTAssertEqual(manifest.chunks, [first])
     }
 }
