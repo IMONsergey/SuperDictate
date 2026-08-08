@@ -97,18 +97,15 @@ func makeSuperDictateProductSnapshot(
     agentRunning: Bool,
     language: InterfaceLanguage
 ) -> SuperDictateProductSnapshot {
-    // The same migration contract feeds both the volatile live projection and
-    // the durable Library. New rows therefore keep one UUID/date/audio-duration
-    // identity from their first visible frame through disk persistence; older
-    // pre-metadata rows retain the deterministic legacy fallback identity.
+    // This bridge stays on the pre-metadata history projection until the runtime
+    // schema and live bridge switch atomically in the integration slice. Doing
+    // one without the other would either fail to compile or briefly give the same
+    // recording different volatile and durable identities.
     let recordings = SuperDictateLegacyHistoryMigrator.recordings(
         from: settings.recentTranscriptEntries.map {
             SuperDictateLegacyHistoryEntry(
                 text: $0.text,
-                transcriptionDurationSeconds: $0.transcriptionDurationSeconds,
-                recordingID: $0.recordingID,
-                createdAt: $0.createdAt,
-                sourceAudioDurationSeconds: $0.sourceAudioDurationSeconds
+                transcriptionDurationSeconds: $0.transcriptionDurationSeconds
             )
         }
     )
