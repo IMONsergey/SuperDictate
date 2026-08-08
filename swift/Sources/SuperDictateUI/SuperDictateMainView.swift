@@ -37,10 +37,24 @@ public struct SuperDictateMainView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if snapshot.status == .needsAttention {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(SuperDictateDesign.ColorRole.warning)
-                        .help(snapshot.issueMessage ?? copy.needsAttention)
+                    Button {
+                        onCommand(.openSystemStatus)
+                    } label: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(SuperDictateDesign.ColorRole.warning)
+                    }
+                    .buttonStyle(.plain)
+                    .help(snapshot.issueMessage ?? copy.openSystemStatus)
                 }
+
+                Menu {
+                    Button(copy.systemStatus) {
+                        onCommand(.openSystemStatus)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .help(copy.more)
 
                 Button {
                     onCommand(snapshot.primaryCaptureCommand)

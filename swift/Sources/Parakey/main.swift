@@ -9565,6 +9565,7 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var hotkeyPausedForExternalCapture = false
     private var hotkeyCaptureFailsafeTimer: Timer?
     private var hotkeyRecorder: HotkeyRecorderController?
+    private var productCaptureCommandObserver: ProductCaptureCommandObserver?
     private var shouldResumeRuntimeAfterWake = false
     private var didLogDeferredWakeRecovery = false
     private var didOfferSetupChecklistThisLaunch = false
@@ -9785,6 +9786,10 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         installWorkspacePowerObservers()
         installGlobalMouseMonitor()
         installHotkeyCaptureObservers()
+        productCaptureCommandObserver = ProductCaptureCommandObserver(
+            onStart: { [weak self] in self?.handlePress() },
+            onStop: { [weak self] in self?.handleRelease() }
+        )
 
         // Configure hotkey listener up front so it picks up the user's
         // saved choice the moment the tap goes live.
@@ -9848,6 +9853,7 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         removeWorkspacePowerObservers()
         removeGlobalMouseMonitor()
         removeHotkeyCaptureObservers()
+        productCaptureCommandObserver = nil
         correctionSyncTimer?.invalidate()
         correctionSyncTimer = nil
         cleanupPendingSharedCorrections(reason: "terminate")
@@ -20209,8 +20215,12 @@ private final class SuperDictateControlPanelApp: NSObject, NSApplicationDelegate
     private var permissionClickCount: [Permission: Int] = [:]
     private var settingsDraft: ControlPanelSettingsDraft?
     private var hotkeyRecorder: HotkeyRecorderController?
+    private var productWindowController: NativeProductWindowController?
 
     private var language: InterfaceLanguage { settings.interfaceLanguage }
+    private var productLanguage: SuperDictateInterfaceLanguage {
+        language == .russian ? .russian : .english
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -20241,6 +20251,7 @@ private final class SuperDictateControlPanelApp: NSObject, NSApplicationDelegate
         refreshTimer = nil
         updateTask?.cancel()
         updateTask = nil
+        productWindowController = nil
         SuperDictateControlPanelRegistry.clearCurrentPanel()
     }
 
@@ -20254,9 +20265,7 @@ private final class SuperDictateControlPanelApp: NSObject, NSApplicationDelegate
             return
         }
         if closingWindow === window {
-            settingsWindow?.orderOut(nil)
-            settingsWindow = nil
-            NSApp.terminate(nil)
+            window = nil
         }
     }
 
@@ -20265,6 +20274,42 @@ private final class SuperDictateControlPanelApp: NSObject, NSApplicationDelegate
     }
 
     private func showWindow() {
+        let snapshot = makeSuperDictateProductSnapshot(
+            settings: settings,
+            agentState: AgentRuntimeStateStore.read(),
+            agentRunning: SuperDictateAgentService.isAgentRunning(),
+            language: language
+        )
+        if let productWindowController {
+            productWindowController.refresh(snapshot: snapshot, language: productLanguage)
+            productWindowController.show()
+            return
+        }
+
+        let controller = NativeProductWindowController(
+            initialSnapshot: snapshot,
+            language: productLanguage,
+            onOpenSettings: { [weak self] in
+                self?.openSettingsClicked(NSButton())
+            },
+            onOpenSystemStatus: { [weak self] in
+                self?.showSystemStatusWindow()
+            },
+            onClose: { [weak self] in
+                self?.productWindowController = nil
+                self?.settingsWindow?.orderOut(nil)
+                self?.settingsWindow = nil
+                self?.window?.orderOut(nil)
+                self?.window = nil
+                NSApp.terminate(nil)
+            }
+        )
+        productWindowController = controller
+        controller.show()
+        refresh(force: true)
+    }
+
+    private func showSystemStatusWindow() {
         if let window {
             refresh(force: true)
             window.makeKeyAndOrderFront(nil)
@@ -20276,7 +20321,7 @@ private final class SuperDictateControlPanelApp: NSObject, NSApplicationDelegate
                               styleMask: [.titled, .closable, .miniaturizable],
                               backing: .buffered,
                               defer: false)
-        window.title = "SuperDictate"
+        window.title = t("SuperDictate — состояние системы", "SuperDictate — System Status")
         window.contentMinSize = NSSize(width: 520, height: 310)
         window.contentMaxSize = NSSize(width: 520, height: 310)
         window.isReleasedWhenClosed = false
@@ -20303,13 +20348,26 @@ private final class SuperDictateControlPanelApp: NSObject, NSApplicationDelegate
     }
 
     private func refresh(force: Bool = false) {
-        guard let window else { return }
+        let agentState = AgentRuntimeStateStore.read()
+        let agentRunning = SuperDictateAgentService.isAgentRunning()
+        productWindowController?.refresh(
+            snapshot: makeSuperDictateProductSnapshot(
+                settings: settings,
+                agentState: agentState,
+                agentRunning: agentRunning,
+                language: language
+            ),
+            language: productLanguage
+        )
+
         let fingerprint = renderFingerprint()
         guard force || fingerprint != lastRenderFingerprint else { return }
         lastRenderFingerprint = fingerprint
-        resizeCompactPanel(window)
-        window.title = t("SuperDictate — панель управления", "SuperDictate — Control Panel")
-        window.contentView = makeContentView()
+        if let window {
+            resizeCompactPanel(window)
+            window.title = t("SuperDictate — состояние системы", "SuperDictate — System Status")
+            window.contentView = makeContentView()
+        }
         if let settingsWindow, settingsWindow.isVisible {
             settingsWindow.title = t("Настройки SuperDictate", "SuperDictate Settings")
             settingsWindow.contentView = makeSettingsContentView()
