@@ -51,5 +51,9 @@ let package = Package(
             // path. Source PNGs live in swift/Resources/ at the repo
             // root, NOT in the SwiftPM target, so SwiftPM never sees them.
         ),
+        .testTarget(
+            name: "SuperDictateCoreTests",
+            dependencies: ["SuperDictateCore"]
+        ),
     ]
 )
