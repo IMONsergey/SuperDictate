@@ -270,7 +270,9 @@ private struct RecordingDetailView: View {
                         .textSelection(.enabled)
 
                     HStack(spacing: SuperDictateDesign.Spacing.inline) {
-                        Text(recording.createdAt, format: .dateTime.day().month().year().hour().minute())
+                        if let createdAt = recording.createdAt {
+                            Text(createdAt, format: .dateTime.day().month().year().hour().minute())
+                        }
                         if let duration = recording.durationSeconds {
                             Text(durationLabel(duration))
                         }
@@ -380,9 +382,11 @@ private struct RecordingRow: View {
                         .font(SuperDictateDesign.TypeStyle.interfaceMedium)
                         .foregroundStyle(SuperDictateDesign.ColorRole.textPrimary)
                         .lineLimit(1)
-                    Text(recording.createdAt, format: .dateTime.day().month().hour().minute())
-                        .font(SuperDictateDesign.TypeStyle.caption)
-                        .foregroundStyle(SuperDictateDesign.ColorRole.textSecondary)
+                    if let createdAt = recording.createdAt {
+                        Text(createdAt, format: .dateTime.day().month().hour().minute())
+                            .font(SuperDictateDesign.TypeStyle.caption)
+                            .foregroundStyle(SuperDictateDesign.ColorRole.textSecondary)
+                    }
                 }
                 Spacer()
                 if recording.requiresAttention {
