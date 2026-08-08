@@ -32,7 +32,9 @@ public struct SuperDictateRecording: Identifiable, Codable, Equatable, Sendable 
     public var title: String
     public var transcript: String
     public var summary: String?
-    public var createdAt: Date
+    /// `nil` means the backing runtime does not know the capture timestamp.
+    /// The UI must not substitute the current date and present it as source truth.
+    public var createdAt: Date?
     public var durationSeconds: TimeInterval?
     public var people: [String]
     public var requiresAttention: Bool
@@ -42,7 +44,7 @@ public struct SuperDictateRecording: Identifiable, Codable, Equatable, Sendable 
         title: String,
         transcript: String,
         summary: String? = nil,
-        createdAt: Date = Date(),
+        createdAt: Date? = nil,
         durationSeconds: TimeInterval? = nil,
         people: [String] = [],
         requiresAttention: Bool = false
@@ -103,7 +105,7 @@ public struct SuperDictateProductSnapshot: Codable, Equatable, Sendable {
         issueMessage: String? = nil
     ) {
         self.status = status
-        self.recordings = recordings.sorted { $0.createdAt > $1.createdAt }
+        self.recordings = Self.orderedRecordings(recordings)
         self.tasks = tasks
         self.activeRecordingStartedAt = activeRecordingStartedAt
         self.issueMessage = issueMessage
@@ -127,6 +129,25 @@ public struct SuperDictateProductSnapshot: Codable, Equatable, Sendable {
 
     public var primaryCaptureCommand: SuperDictateCommand {
         isCaptureActive ? .stopRecording : .startRecording
+    }
+
+    private static func orderedRecordings(_ source: [SuperDictateRecording]) -> [SuperDictateRecording] {
+        source.enumerated()
+            .sorted { lhs, rhs in
+                switch (lhs.element.createdAt, rhs.element.createdAt) {
+                case let (left?, right?):
+                    if left != right { return left > right }
+                    return lhs.offset < rhs.offset
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                case (nil, nil):
+                    // Preserve the runtime's source order when it has no dates.
+                    return lhs.offset < rhs.offset
+                }
+            }
+            .map(\.element)
     }
 }
 
