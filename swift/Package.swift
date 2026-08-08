@@ -19,16 +19,27 @@ let package = Package(
     ],
     products: [
         .executable(name: "Parakey", targets: ["Parakey"]),
+        .library(name: "SuperDictateCore", targets: ["SuperDictateCore"]),
+        .library(name: "SuperDictateUI", targets: ["SuperDictateUI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio.git",
                  revision: "313feb4bd692780a9a5b5fa9048fdb119486dde8"),
     ],
     targets: [
+        .target(
+            name: "SuperDictateCore"
+        ),
+        .target(
+            name: "SuperDictateUI",
+            dependencies: ["SuperDictateCore"]
+        ),
         .executableTarget(
             name: "Parakey",
             dependencies: [
                 .product(name: "FluidAudio", package: "FluidAudio"),
+                "SuperDictateCore",
+                "SuperDictateUI",
             ]
             // No `resources:` here on purpose. SwiftPM bundles them as
             // a `<Package>_<Target>.bundle` directory next to the
