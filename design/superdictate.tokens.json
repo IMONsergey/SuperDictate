@@ -1,0 +1,159 @@
+{
+  "$schema": "https://www.designtokens.org/schemas/2025.10/format.json",
+  "meta": {
+    "name": "SuperDictate Design System v2",
+    "version": "2.0.0-alpha.1",
+    "intent": "Native, calm, local-first, content-first interface",
+    "platformPolicy": "Native Apple implementations should resolve semantic colors and control geometry through system APIs before using literal fallback values."
+  },
+  "primitive": {
+    "color": {
+      "neutral": {
+        "0": { "$type": "color", "$value": "#FFFFFF" },
+        "25": { "$type": "color", "$value": "#FCFCFC" },
+        "50": { "$type": "color", "$value": "#F9F9F9" },
+        "75": { "$type": "color", "$value": "#F3F3F3" },
+        "100": { "$type": "color", "$value": "#EDEDED" },
+        "150": { "$type": "color", "$value": "#DFDFDF" },
+        "200": { "$type": "color", "$value": "#CDCDCD" },
+        "300": { "$type": "color", "$value": "#AFAFAF" },
+        "400": { "$type": "color", "$value": "#8F8F8F" },
+        "500": { "$type": "color", "$value": "#5D5D5D" },
+        "700": { "$type": "color", "$value": "#303030" },
+        "800": { "$type": "color", "$value": "#212121" },
+        "900": { "$type": "color", "$value": "#181818" },
+        "1000": { "$type": "color", "$value": "#0D0D0D" }
+      },
+      "red": {
+        "50": { "$type": "color", "$value": "#FFF0F0" },
+        "400": { "$type": "color", "$value": "#FA423E" },
+        "600": { "$type": "color", "$value": "#BA2623" }
+      },
+      "green": {
+        "50": { "$type": "color", "$value": "#D9F4E4" },
+        "400": { "$type": "color", "$value": "#04B84C" },
+        "700": { "$type": "color", "$value": "#00692A" }
+      },
+      "orange": {
+        "50": { "$type": "color", "$value": "#FFE7D9" },
+        "400": { "$type": "color", "$value": "#FB6A22" },
+        "700": { "$type": "color", "$value": "#923B0F" }
+      }
+    },
+    "space": {
+      "0": { "$type": "dimension", "$value": "0px" },
+      "1": { "$type": "dimension", "$value": "4px" },
+      "2": { "$type": "dimension", "$value": "8px" },
+      "3": { "$type": "dimension", "$value": "12px" },
+      "4": { "$type": "dimension", "$value": "16px" },
+      "5": { "$type": "dimension", "$value": "20px" },
+      "6": { "$type": "dimension", "$value": "24px" },
+      "8": { "$type": "dimension", "$value": "32px" },
+      "10": { "$type": "dimension", "$value": "40px" }
+    },
+    "radius": {
+      "compact": { "$type": "dimension", "$value": "6px" },
+      "surface": { "$type": "dimension", "$value": "10px" },
+      "floating": { "$type": "dimension", "$value": "14px" },
+      "capsule": { "$type": "dimension", "$value": "999px" }
+    },
+    "motion": {
+      "fast": { "$type": "duration", "$value": "120ms" },
+      "standard": { "$type": "duration", "$value": "180ms" },
+      "deliberate": { "$type": "duration", "$value": "240ms" },
+      "hudEnter": { "$type": "duration", "$value": "280ms" }
+    },
+    "font": {
+      "weight": {
+        "regular": { "$type": "fontWeight", "$value": 400 },
+        "medium": { "$type": "fontWeight", "$value": 500 },
+        "semibold": { "$type": "fontWeight", "$value": 600 },
+        "bold": { "$type": "fontWeight", "$value": 700 }
+      }
+    }
+  },
+  "semantic": {
+    "color": {
+      "text": {
+        "primary": { "$type": "color", "$value": "{primitive.color.neutral.1000}" },
+        "secondary": { "$type": "color", "$value": "{primitive.color.neutral.500}" },
+        "tertiary": { "$type": "color", "$value": "{primitive.color.neutral.400}" },
+        "inverse": { "$type": "color", "$value": "{primitive.color.neutral.0}" }
+      },
+      "surface": {
+        "canvas": { "$type": "color", "$value": "{primitive.color.neutral.0}" },
+        "secondary": { "$type": "color", "$value": "{primitive.color.neutral.50}" },
+        "tertiary": { "$type": "color", "$value": "{primitive.color.neutral.75}" },
+        "raised": { "$type": "color", "$value": "{primitive.color.neutral.0}" }
+      },
+      "border": {
+        "subtle": { "$type": "color", "$value": "{primitive.color.neutral.100}" },
+        "default": { "$type": "color", "$value": "{primitive.color.neutral.150}" },
+        "strong": { "$type": "color", "$value": "{primitive.color.neutral.300}" }
+      },
+      "action": {
+        "primaryFallback": { "$type": "color", "$value": "{primitive.color.neutral.1000}", "$description": "Web/reference fallback only. Native Apple builds should prefer the user's system accent color for generic primary controls." },
+        "primaryForeground": { "$type": "color", "$value": "{primitive.color.neutral.0}" },
+        "quiet": { "$type": "color", "$value": "{primitive.color.neutral.75}" }
+      },
+      "status": {
+        "recording": { "$type": "color", "$value": "{primitive.color.red.400}" },
+        "success": { "$type": "color", "$value": "{primitive.color.green.400}" },
+        "warning": { "$type": "color", "$value": "{primitive.color.orange.400}" },
+        "destructive": { "$type": "color", "$value": "{primitive.color.red.600}" }
+      }
+    },
+    "space": {
+      "inline": { "$type": "dimension", "$value": "{primitive.space.2}" },
+      "control": { "$type": "dimension", "$value": "{primitive.space.3}" },
+      "component": { "$type": "dimension", "$value": "{primitive.space.4}" },
+      "contentGutter": { "$type": "dimension", "$value": "{primitive.space.6}" },
+      "section": { "$type": "dimension", "$value": "{primitive.space.8}" },
+      "major": { "$type": "dimension", "$value": "{primitive.space.10}" }
+    },
+    "type": {
+      "display": {
+        "$type": "typography",
+        "$value": { "fontFamily": "system-ui", "fontSize": "28px", "fontWeight": 600, "lineHeight": "34px", "letterSpacing": "0px" }
+      },
+      "title": {
+        "$type": "typography",
+        "$value": { "fontFamily": "system-ui", "fontSize": "20px", "fontWeight": 600, "lineHeight": "26px", "letterSpacing": "0px" }
+      },
+      "heading": {
+        "$type": "typography",
+        "$value": { "fontFamily": "system-ui", "fontSize": "16px", "fontWeight": 600, "lineHeight": "22px", "letterSpacing": "0px" }
+      },
+      "body": {
+        "$type": "typography",
+        "$value": { "fontFamily": "system-ui", "fontSize": "15px", "fontWeight": 400, "lineHeight": "22px", "letterSpacing": "0px" }
+      },
+      "ui": {
+        "$type": "typography",
+        "$value": { "fontFamily": "system-ui", "fontSize": "13px", "fontWeight": 400, "lineHeight": "18px", "letterSpacing": "0px" }
+      },
+      "caption": {
+        "$type": "typography",
+        "$value": { "fontFamily": "system-ui", "fontSize": "12px", "fontWeight": 400, "lineHeight": "16px", "letterSpacing": "0px" }
+      }
+    }
+  },
+  "component": {
+    "recordingHUD": {
+      "radius": { "$type": "dimension", "$value": "{primitive.radius.floating}" },
+      "paddingX": { "$type": "dimension", "$value": "{primitive.space.4}" },
+      "paddingY": { "$type": "dimension", "$value": "{primitive.space.3}" },
+      "gap": { "$type": "dimension", "$value": "{primitive.space.2}" },
+      "enterDuration": { "$type": "duration", "$value": "{primitive.motion.hudEnter}" }
+    },
+    "listRow": {
+      "paddingX": { "$type": "dimension", "$value": "{primitive.space.3}" },
+      "paddingY": { "$type": "dimension", "$value": "{primitive.space.2}" },
+      "gap": { "$type": "dimension", "$value": "{primitive.space.3}" }
+    },
+    "document": {
+      "maxReadableWidth": { "$type": "dimension", "$value": "760px" },
+      "contentGutter": { "$type": "dimension", "$value": "{semantic.space.contentGutter}" }
+    }
+  }
+}
