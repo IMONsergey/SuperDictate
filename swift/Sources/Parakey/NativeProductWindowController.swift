@@ -5,10 +5,10 @@ import SuperDictateUI
 
 /// Owns the visible native product window in the control-panel process.
 ///
-/// The background agent remains the audio/hotkey/ASR engine. Product content is
-/// backed by the private durable Library index; the legacy rolling history is
-/// only an input for incremental migration until the agent writes the Library
-/// directly on every successful dictation.
+/// The background agent is the only durable Library writer. This controller is
+/// deliberately read-only: it combines atomic Library snapshots with volatile
+/// runtime state for presentation, but never saves, upserts or deletes Library
+/// content itself.
 @MainActor
 final class NativeProductWindowController: NSObject, NSWindowDelegate {
     private let model: SuperDictateMainModel
@@ -20,9 +20,7 @@ final class NativeProductWindowController: NSObject, NSWindowDelegate {
     private var runtimeSnapshot: SuperDictateProductSnapshot
     private var libraryArchive = SuperDictateLibraryArchive()
     private var libraryLoaded = false
-    private var lastRuntimeRecordingIDs: Set<UUID> = []
-    private var pendingRuntimeRecordings: [SuperDictateRecording]?
-    private var librarySyncTask: Task<Void, Never>?
+    private var libraryReadTask: Task<Void, Never>?
     private var window: NSWindow?
 
     init(
@@ -47,13 +45,14 @@ final class NativeProductWindowController: NSObject, NSWindowDelegate {
         }
 
         super.init()
-        scheduleLibrarySync(recordings: initialSnapshot.recordings, forceReload: true)
+        applyPresentationSnapshot()
+        scheduleLibraryRead(forceReload: true)
     }
 
     func show() {
         let window = window ?? makeWindow()
         self.window = window
-        scheduleLibrarySync(recordings: runtimeSnapshot.recordings, forceReload: true)
+        scheduleLibraryRead(forceReload: true)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -64,8 +63,18 @@ final class NativeProductWindowController: NSObject, NSWindowDelegate {
         if model.language != language {
             model.language = language
         }
-        applyCombinedSnapshot()
-        scheduleLibrarySync(recordings: snapshot.recordings, forceReload: false)
+
+        if !isTranscriptHistoryEnabled {
+            // Privacy state changes must be reflected immediately in the UI;
+            // do not wait for the agent's asynchronous disk clear to finish.
+            libraryReadTask?.cancel()
+            libraryReadTask = nil
+            libraryArchive = SuperDictateLibraryArchive()
+            libraryLoaded = false
+        }
+
+        applyPresentationSnapshot()
+        scheduleLibraryRead(forceReload: false)
     }
 
     func close() {
@@ -75,10 +84,14 @@ final class NativeProductWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         guard let closingWindow = notification.object as? NSWindow,
               closingWindow === window else { return }
-        librarySyncTask?.cancel()
-        librarySyncTask = nil
+        libraryReadTask?.cancel()
+        libraryReadTask = nil
         window = nil
         onClose()
+    }
+
+    private var isTranscriptHistoryEnabled: Bool {
+        Settings.shared.recentTranscriptLimit != .off
     }
 
     private func makeWindow() -> NSWindow {
@@ -102,88 +115,83 @@ final class NativeProductWindowController: NSObject, NSWindowDelegate {
         return window
     }
 
-    private func applyCombinedSnapshot() {
+    private func applyPresentationSnapshot() {
+        guard isTranscriptHistoryEnabled else {
+            let hidden = SuperDictateProductSnapshot(
+                status: runtimeSnapshot.status,
+                recordings: [],
+                tasks: [],
+                activeRecordingStartedAt: runtimeSnapshot.activeRecordingStartedAt,
+                issueMessage: runtimeSnapshot.issueMessage
+            )
+            if model.snapshot != hidden {
+                model.snapshot = hidden
+            }
+            if !model.memoryDocuments.isEmpty {
+                model.memoryDocuments = []
+            }
+            return
+        }
+
         guard libraryLoaded else {
             if model.snapshot != runtimeSnapshot {
                 model.snapshot = runtimeSnapshot
             }
+            let fallbackDocuments = runtimeSnapshot.recordings.map(
+                SuperDictateMemoryDocument.init(recording:)
+            )
+            if model.memoryDocuments != fallbackDocuments {
+                model.memoryDocuments = fallbackDocuments
+            }
             return
         }
 
-        let combined = SuperDictateProductSnapshot(
-            status: runtimeSnapshot.status,
-            recordings: libraryArchive.recordings,
-            tasks: libraryArchive.tasks,
-            activeRecordingStartedAt: runtimeSnapshot.activeRecordingStartedAt,
-            issueMessage: runtimeSnapshot.issueMessage
+        // Reconciliation is presentation-only in this process. Its returned
+        // archive may contain a just-finished live recording that the agent has
+        // not written yet; we use that projection in memory but never persist it.
+        let reconciled = SuperDictateLibraryReconciler.reconcile(
+            archive: libraryArchive,
+            liveSnapshot: runtimeSnapshot
         )
-        if model.snapshot != combined {
-            model.snapshot = combined
+        if model.snapshot != reconciled.snapshot {
+            model.snapshot = reconciled.snapshot
         }
-        if model.memoryDocuments != libraryArchive.memoryDocuments {
-            model.memoryDocuments = libraryArchive.memoryDocuments
+        if model.memoryDocuments != reconciled.archive.memoryDocuments {
+            model.memoryDocuments = reconciled.archive.memoryDocuments
         }
     }
 
-    private func scheduleLibrarySync(
-        recordings: [SuperDictateRecording],
-        forceReload: Bool
-    ) {
-        guard let libraryStore else { return }
+    private func scheduleLibraryRead(forceReload: Bool) {
+        guard isTranscriptHistoryEnabled,
+              let libraryStore else { return }
 
-        let recordingIDs = Set(recordings.map(\.id))
-        guard forceReload || !libraryLoaded || recordingIDs != lastRuntimeRecordingIDs else {
-            return
-        }
-        lastRuntimeRecordingIDs = recordingIDs
-        pendingRuntimeRecordings = recordings
+        let liveIDs = Set(runtimeSnapshot.recordings.map(\.id))
+        let durableIDs = Set(libraryArchive.recordings.map(\.id))
+        let agentMayStillBePersisting = !liveIDs.isSubset(of: durableIDs)
+        guard forceReload || !libraryLoaded || agentMayStillBePersisting else { return }
+        guard libraryReadTask == nil else { return }
 
-        guard librarySyncTask == nil else { return }
-        librarySyncTask = Task { [weak self] in
+        libraryReadTask = Task { [weak self] in
             guard let self else { return }
-
             do {
-                var archive = try await libraryStore.load()
-                let runtimeRecordings = self.pendingRuntimeRecordings ?? []
-                self.pendingRuntimeRecordings = nil
-
-                var recordingIDs = Set(archive.recordings.map(\.id))
-                var documentIDs = Set(archive.memoryDocuments.map(\.recordingID))
-                var changed = false
-
-                for recording in runtimeRecordings {
-                    if recordingIDs.insert(recording.id).inserted {
-                        archive.recordings.append(recording)
-                        changed = true
-                    }
-                    if documentIDs.insert(recording.id).inserted {
-                        archive.memoryDocuments.append(SuperDictateMemoryDocument(recording: recording))
-                        changed = true
-                    }
+                let archive = try await libraryStore.load()
+                guard !Task.isCancelled else {
+                    self.libraryReadTask = nil
+                    return
                 }
-
-                if changed {
-                    try await libraryStore.save(archive)
-                }
-
                 self.libraryArchive = archive
                 self.libraryLoaded = true
-                self.applyCombinedSnapshot()
+                self.libraryReadTask = nil
+                self.applyPresentationSnapshot()
             } catch is CancellationError {
-                self.librarySyncTask = nil
-                return
+                self.libraryReadTask = nil
             } catch {
-                // Library is a rebuildable private index. A read/write failure
-                // must never stop dictation or hide the runtime fallback state.
-                log("product Library sync failed: \(error.localizedDescription)")
+                // Atomic Library read failure degrades to current live runtime
+                // state. It must never interrupt capture/transcription.
+                log("product Library read failed: \(error.localizedDescription)")
                 self.libraryLoaded = false
-                self.applyCombinedSnapshot()
-            }
-
-            let pending = self.pendingRuntimeRecordings
-            self.librarySyncTask = nil
-            if let pending {
-                self.scheduleLibrarySync(recordings: pending, forceReload: true)
+                self.libraryReadTask = nil
+                self.applyPresentationSnapshot()
             }
         }
     }
@@ -209,8 +217,8 @@ final class NativeProductWindowController: NSObject, NSWindowDelegate {
             // Navigation is local SwiftUI state; no runtime side effect required.
             break
         case .toggleTask:
-            // Task mutation will become a durable Library operation once the
-            // evidence-backed task review surface is connected.
+            // Task mutation will become an agent-owned durable Library operation
+            // when the evidence-backed task review surface is connected.
             break
         }
     }
