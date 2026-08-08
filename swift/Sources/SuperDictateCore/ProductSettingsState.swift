@@ -130,6 +130,9 @@ public enum SuperDictateSettingsCommand: Equatable, Sendable {
     case setRemoveFillerWords(Bool)
     case openModelManager
     case setHistoryEnabled(Bool)
+    /// Explicit durable Library deletion. This is intentionally distinct from
+    /// removing rows from the bounded recent-history cache.
+    case clearLibraryHistory
     case openPermission(SuperDictatePermissionKind)
     case startService
     case restartService
