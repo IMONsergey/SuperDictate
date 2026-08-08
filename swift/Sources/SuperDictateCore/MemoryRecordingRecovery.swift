@@ -40,6 +40,7 @@ public enum SuperDictateMemoryRecoveryError: Error, Equatable, Sendable {
     case unsafeFileType(String)
     case invalidContainer(String)
     case byteLengthMismatch(path: String, expected: Int64, actual: Int64)
+    case fileTooLarge(path: String, actual: Int64, maximum: Int64)
     case fileOperationFailed(String)
     case posix(Int32)
 }
@@ -48,7 +49,7 @@ public enum SuperDictateMemoryRecoveryError: Error, Equatable, Sendable {
 ///
 /// Rules:
 /// - manifest-referenced chunks must still match byte length + CAF magic + SHA;
-/// - `.partial` files are never interpreted as finalized audio;
+/// - partial files are never interpreted as finalized audio;
 /// - a finalized orphan may be reattached only when an fsynced prepared journal
 ///   event proves its timing, format and source metadata;
 /// - undocumented or conflicting files are quarantined, never silently deleted;
@@ -57,12 +58,15 @@ public enum SuperDictateMemoryRecoveryError: Error, Equatable, Sendable {
 public actor SuperDictateMemoryPackageRecovery {
     private let store: JSONSuperDictateMemoryPackageStore
     private let fileManager: FileManager
+    private let policy: SuperDictateMemoryChunkPolicy
 
     public init(
         store: JSONSuperDictateMemoryPackageStore,
+        policy: SuperDictateMemoryChunkPolicy = SuperDictateMemoryChunkPolicy(),
         fileManager: FileManager = .default
     ) {
         self.store = store
+        self.policy = policy
         self.fileManager = fileManager
     }
 
@@ -129,13 +133,17 @@ public actor SuperDictateMemoryPackageRecovery {
             result, event in
             result[event.relativePath] = event
         }
+        let partialExtension = policy.partialSuffix
+        let partialPathSuffix = ".\(partialExtension)"
 
         for source in SuperDictateMemoryAudioSource.allCases {
             let sourceDirectory = await store.audioDirectory(recordingID: recordingID, source: source)
             for url in try sourceFiles(sourceDirectory) {
                 let relativePath = "audio/\(source.rawValue)/\(url.lastPathComponent)"
-                if url.pathExtension == "partial" {
-                    let finalRelativePath = String(relativePath.dropLast(".partial".count))
+                if url.pathExtension == partialExtension {
+                    let finalRelativePath = relativePath.hasSuffix(partialPathSuffix)
+                        ? String(relativePath.dropLast(partialPathSuffix.count))
+                        : relativePath
                     observedRecoveryRelativePaths.insert(finalRelativePath)
                 } else {
                     observedRecoveryRelativePaths.insert(relativePath)
@@ -145,7 +153,7 @@ public actor SuperDictateMemoryPackageRecovery {
                     continue
                 }
 
-                if url.pathExtension == "partial" {
+                if url.pathExtension == partialExtension {
                     result.quarantinedFileNames.append(
                         try quarantine(url, into: quarantineURL)
                     )
@@ -362,7 +370,15 @@ public actor SuperDictateMemoryPackageRecovery {
               st.st_nlink == 1 else {
             throw SuperDictateMemoryRecoveryError.unsafeFileType(url.lastPathComponent)
         }
-        guard st.st_size >= 4 else {
+        let byteLength = Int64(st.st_size)
+        guard byteLength <= policy.maximumChunkBytes else {
+            throw SuperDictateMemoryRecoveryError.fileTooLarge(
+                path: url.lastPathComponent,
+                actual: byteLength,
+                maximum: policy.maximumChunkBytes
+            )
+        }
+        guard byteLength >= 4 else {
             throw SuperDictateMemoryRecoveryError.invalidContainer(url.lastPathComponent)
         }
 
@@ -388,7 +404,7 @@ public actor SuperDictateMemoryPackageRecovery {
         }
 
         return (
-            byteLength: Int64(st.st_size),
+            byteLength: byteLength,
             sha256: hasher.finalize().map { String(format: "%02x", $0) }.joined()
         )
     }
