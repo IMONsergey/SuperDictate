@@ -7,6 +7,8 @@ public enum MemoryCAFChunkWriterError: Error, Equatable, Sendable {
     case bufferAllocationFailed
     case unsupportedPCMBuffer
     case missingOpenChunkState
+    case writerFinished
+    case writerAbandoned
 }
 
 /// Serializes copied PCM callback blocks into immutable source-native CAF chunks.
@@ -17,6 +19,12 @@ public enum MemoryCAFChunkWriterError: Error, Equatable, Sendable {
 /// buffer crosses the actor boundary and the proven dictation capture path stays
 /// untouched.
 actor MemoryCAFChunkWriter {
+    private enum Lifecycle {
+        case active
+        case finished
+        case abandoned
+    }
+
     private struct FormatKey: Equatable, Sendable {
         let sampleRateHz: Int
         let channelCount: Int
@@ -27,6 +35,7 @@ actor MemoryCAFChunkWriter {
     private let committer: SuperDictateMemoryAudioChunkCommitter
     private let targetChunkMilliseconds: Int64
 
+    private var lifecycle: Lifecycle = .active
     private var nextSequence = 0
     private var currentSequence: Int?
     private var currentChunkID: UUID?
@@ -56,6 +65,8 @@ actor MemoryCAFChunkWriter {
     /// backwards. A source-format change closes the current immutable chunk and
     /// starts a new one instead of silently converting the authoritative audio.
     func append(_ block: SuperDictateMemoryPCMBlock) async throws {
+        try requireActive()
+
         if let previousEnd = lastBlockEndMilliseconds,
            block.sessionStartMilliseconds < previousEnd {
             throw MemoryCAFChunkWriterError.nonMonotonicTimeline(
@@ -94,9 +105,19 @@ actor MemoryCAFChunkWriter {
 
     /// Finalize the active chunk and return every descriptor successfully made
     /// authoritative in the package manifest during this writer lifetime.
+    /// Calling finish again is idempotent; an abandoned source can never be
+    /// promoted to a successful finish.
     func finish() async throws -> [SuperDictateMemoryAudioChunk] {
-        try await finalizeCurrentChunk()
-        return committedChunks
+        switch lifecycle {
+        case .finished:
+            return committedChunks
+        case .abandoned:
+            throw MemoryCAFChunkWriterError.writerAbandoned
+        case .active:
+            try await finalizeCurrentChunk()
+            lifecycle = .finished
+            return committedChunks
+        }
     }
 
     /// Close the active AVAudioFile without crossing the final commit boundary.
@@ -105,6 +126,7 @@ actor MemoryCAFChunkWriter {
     /// fails; silently deleting or pretending to finalize incomplete source would
     /// violate Memory Capture's source-truth contract.
     func abandonForRecovery() {
+        guard lifecycle == .active else { return }
         currentFile = nil
         currentFormat = nil
         currentSequence = nil
@@ -113,10 +135,22 @@ actor MemoryCAFChunkWriter {
         currentFormatKey = nil
         currentStartMilliseconds = nil
         currentEndMilliseconds = nil
+        lifecycle = .abandoned
     }
 
     var committedChunkCount: Int {
         committedChunks.count
+    }
+
+    private func requireActive() throws {
+        switch lifecycle {
+        case .active:
+            return
+        case .finished:
+            throw MemoryCAFChunkWriterError.writerFinished
+        case .abandoned:
+            throw MemoryCAFChunkWriterError.writerAbandoned
+        }
     }
 
     private func openChunk(
