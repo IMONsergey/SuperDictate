@@ -31,8 +31,8 @@ private struct SuperDictateMemoryManifestFile: Codable, Sendable {
 ///
 /// This store owns package creation and atomic manifest replacement only. Audio
 /// adapters must finalize immutable chunk files separately before appending their
-/// descriptors to the manifest. There is deliberately no source-audio deletion
-/// API in this first contract.
+/// descriptors through the actor-isolated mutation methods. There is deliberately
+/// no source-audio deletion API in this first contract.
 public actor JSONSuperDictateMemoryPackageStore {
     public static let schemaVersion = 1
     public static let maximumManifestBytes = 4 * 1_024 * 1_024
@@ -137,7 +137,11 @@ public actor JSONSuperDictateMemoryPackageStore {
         return file.manifest
     }
 
-    public func saveManifest(
+    /// Internal on purpose. External Parakey/ScreenCaptureKit adapters may read
+    /// manifests, but mutations must cross the actor-isolated package operations
+    /// in `MemoryRecordingPackageMutations.swift` so dual source writers cannot
+    /// race a load-modify-save cycle.
+    func saveManifest(
         _ manifest: SuperDictateMemoryRecordingManifest
     ) throws {
         try manifest.validate()
@@ -347,11 +351,12 @@ public actor JSONSuperDictateMemoryPackageStore {
         }
 
         try data.withUnsafeBytes { bytes in
+            guard let baseAddress = bytes.baseAddress else { return }
             var offset = 0
             while offset < bytes.count {
                 let written = Darwin.write(
                     fd,
-                    bytes.baseAddress!.advanced(by: offset),
+                    baseAddress.advanced(by: offset),
                     bytes.count - offset
                 )
                 if written < 0 {
@@ -381,7 +386,7 @@ public actor JSONSuperDictateMemoryPackageStore {
             throw SuperDictateMemoryPackageStoreError.posix(errno)
         }
 
-        let directoryFD = Darwin.open(directoryURL.path, O_RDONLY | O_CLOEXEC)
+        let directoryFD = Darwin.open(directoryURL.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
         if directoryFD >= 0 {
             _ = Darwin.fsync(directoryFD)
             _ = Darwin.close(directoryFD)
