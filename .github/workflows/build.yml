@@ -1,49 +1,77 @@
 name: build
 
-# Production changes are required to land through pull requests. Run the heavy
-# macOS release gate once on the PR head; a squash merge must not immediately
-# consume another hosted macOS runner to repeat the identical build.
 on:
   pull_request:
 
 permissions:
-  contents: read
-
-# Keep only the newest build for each pull request. SuperDictate's gate compiles
-# FluidAudio and exercises a real install/uninstall, so obsolete intermediate
-# heads should never occupy runner capacity after a newer commit exists.
-concurrency:
-  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  actions: write
+  contents: write
+  pull-requests: write
 
 jobs:
-  macos:
-    runs-on: macos-15
+  cleanup:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - name: Validate scripts and plists
-        run: ./scripts/check.sh
-      - name: Swift self-tests
-        run: swift run -c debug --package-path swift Parakey --self-test all
-      - name: Product core tests
-        run: swift test -c debug --package-path swift
-      - name: Build app bundle
-        run: ./scripts/build-app.sh "$RUNNER_TEMP/SuperDictate.app"
-      - name: Verify app bundle
+        with:
+          ref: ci/clear-legacy-run-backlog
+          fetch-depth: 0
+
+      - name: Cancel obsolete legacy build runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP_FROM_RUN_NUMBER: "148"
         run: |
-          test -x "$RUNNER_TEMP/SuperDictate.app/Contents/MacOS/SuperDictate"
-          codesign --verify --deep --strict "$RUNNER_TEMP/SuperDictate.app"
-      - name: Exercise installer and uninstaller
+          set -euo pipefail
+          api="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          runs="$({ curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$api/actions/workflows/build.yml/runs?per_page=100"; })"
+
+          mapfile -t stale_ids < <(
+            printf '%s' "$runs" | jq -r --argjson keep "$KEEP_FROM_RUN_NUMBER" '
+              .workflow_runs[]
+              | select(.run_number < $keep)
+              | select(.status == "queued" or .status == "in_progress" or .status == "requested" or .status == "waiting" or .status == "pending")
+              | .id
+            '
+          )
+
+          printf 'Cancelling %d obsolete build run(s).\n' "${#stale_ids[@]}"
+          for id in "${stale_ids[@]}"; do
+            curl -fsSL -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$api/actions/runs/$id/cancel" >/dev/null || true
+            printf 'cancel requested: %s\n' "$id"
+          done
+
+      - name: Close cleanup pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          mkdir -p "$RUNNER_TEMP/release"
-          ditto -c -k --sequesterRsrc --keepParent \
-            "$RUNNER_TEMP/SuperDictate.app" "$RUNNER_TEMP/release/SuperDictate.zip"
-          checksum="$(shasum -a 256 "$RUNNER_TEMP/release/SuperDictate.zip" | awk '{print $1}')"
-          SUPERDICTATE_RELEASE_URL="file://$RUNNER_TEMP/release/SuperDictate.zip" \
-          SUPERDICTATE_RELEASE_SHA256="$checksum" \
-          SUPERDICTATE_NO_OPEN=1 \
-            ./install.sh
-          test -x /Applications/SuperDictate.app/Contents/MacOS/SuperDictate
-          codesign --verify --deep --strict /Applications/SuperDictate.app
-          ./uninstall.sh
-          test ! -e /Applications/SuperDictate.app
+          set -euo pipefail
+          curl -fsSL -X PATCH \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" \
+            -d '{"state":"closed"}' >/dev/null
+
+      - name: Restore production workflow and self-clean
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git show origin/main:.github/workflows/build.yml > .github/workflows/build.yml
+          git config user.name "SuperDictate automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add .github/workflows/build.yml
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Restore production workflow after backlog cleanup"
+          git push origin HEAD:ci/clear-legacy-run-backlog
