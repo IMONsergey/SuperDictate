@@ -50,7 +50,8 @@ public struct SuperDictateMemoryDocument: Identifiable, Codable, Equatable, Send
     public var id: UUID { recordingID }
     public var recordingID: UUID
     public var title: String
-    public var createdAt: Date
+    /// `nil` is preserved for legacy/runtime sources that do not know the date.
+    public var createdAt: Date?
     public var people: [String]
     public var tags: [String]
     public var segments: [SuperDictateEvidenceSegment]
@@ -58,7 +59,7 @@ public struct SuperDictateMemoryDocument: Identifiable, Codable, Equatable, Send
     public init(
         recordingID: UUID,
         title: String,
-        createdAt: Date,
+        createdAt: Date? = nil,
         people: [String] = [],
         tags: [String] = [],
         segments: [SuperDictateEvidenceSegment]
@@ -126,7 +127,7 @@ public struct SuperDictateMemoryQuery: Codable, Equatable, Sendable {
 public struct SuperDictateMemorySearchHit: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID
     public var recordingID: UUID
-    public var documentCreatedAt: Date
+    public var documentCreatedAt: Date?
     public var segmentID: UUID
     public var excerpt: String
     public var speaker: String?
@@ -168,13 +169,14 @@ public struct SuperDictateLocalMemoryIndex: Sendable {
         var latestByID: [UUID: SuperDictateMemoryDocument] = [:]
         for document in documents {
             if let existing = latestByID[document.recordingID],
-               existing.createdAt > document.createdAt {
+               !Self.shouldReplace(existing: existing, with: document) {
                 continue
             }
             latestByID[document.recordingID] = document
         }
         self.documents = latestByID.values.sorted { lhs, rhs in
-            if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+            if Self.dateRanksBefore(lhs.createdAt, rhs.createdAt) { return true }
+            if Self.dateRanksBefore(rhs.createdAt, lhs.createdAt) { return false }
             return lhs.recordingID.uuidString < rhs.recordingID.uuidString
         }
     }
@@ -231,9 +233,8 @@ public struct SuperDictateLocalMemoryIndex: Sendable {
             }
             .sorted { lhs, rhs in
                 if lhs.1 != rhs.1 { return lhs.1 > rhs.1 }
-                if lhs.0.createdAt != rhs.0.createdAt {
-                    return lhs.0.createdAt > rhs.0.createdAt
-                }
+                if Self.dateRanksBefore(lhs.0.createdAt, rhs.0.createdAt) { return true }
+                if Self.dateRanksBefore(rhs.0.createdAt, lhs.0.createdAt) { return false }
                 return lhs.0.recordingID.uuidString < rhs.0.recordingID.uuidString
             }
             .prefix(min(100, max(1, maximumResults)))
@@ -278,9 +279,8 @@ public struct SuperDictateLocalMemoryIndex: Sendable {
         _ rhs: SuperDictateMemorySearchHit
     ) -> Bool {
         if lhs.score != rhs.score { return lhs.score > rhs.score }
-        if lhs.documentCreatedAt != rhs.documentCreatedAt {
-            return lhs.documentCreatedAt > rhs.documentCreatedAt
-        }
+        if dateRanksBefore(lhs.documentCreatedAt, rhs.documentCreatedAt) { return true }
+        if dateRanksBefore(rhs.documentCreatedAt, lhs.documentCreatedAt) { return false }
         if lhs.recordingID != rhs.recordingID {
             return lhs.recordingID.uuidString < rhs.recordingID.uuidString
         }
@@ -288,6 +288,37 @@ public struct SuperDictateLocalMemoryIndex: Sendable {
         let rightStart = rhs.startMilliseconds ?? Int64.max
         if leftStart != rightStart { return leftStart < rightStart }
         return lhs.segmentID.uuidString < rhs.segmentID.uuidString
+    }
+
+    private static func shouldReplace(
+        existing: SuperDictateMemoryDocument,
+        with candidate: SuperDictateMemoryDocument
+    ) -> Bool {
+        switch (existing.createdAt, candidate.createdAt) {
+        case let (old?, new?):
+            return new >= old
+        case (nil, _?):
+            return true
+        case (_?, nil):
+            return false
+        case (nil, nil):
+            // With no source timestamps, the last projection supplied by the
+            // runtime wins. We do not fabricate chronology.
+            return true
+        }
+    }
+
+    private static func dateRanksBefore(_ lhs: Date?, _ rhs: Date?) -> Bool {
+        switch (lhs, rhs) {
+        case let (left?, right?):
+            return left > right
+        case (_?, nil):
+            return true
+        case (nil, _?):
+            return false
+        case (nil, nil):
+            return false
+        }
     }
 }
 
