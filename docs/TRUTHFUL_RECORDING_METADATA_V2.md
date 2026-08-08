@@ -55,6 +55,10 @@ Only that duration is reset to unknown. Real runtime UUID rows are excluded. Leg
 
 The repair is counted as a merge change so the existing single writer atomically persists the corrected archive even when no new history rows are added.
 
+## Release gate
+
+This slice changes Core migration/repair semantics only. It does not change audio capture, ASR, hotkeys, insertion, TCC or visible UI runtime behavior. Even so, it must pass the same complete pull-request gate as runtime changes: repository checks, unchanged Parakey self-tests, all Core XCTest, release `.app` build, strict codesign verification and real install/uninstall smoke.
+
 ## Follow-up
 
 The next runtime slice gives every new successful in-session dictation a real UUID and capture timestamp and carries the actual captured audio duration through history, live projection and the single-writer Library path. Pending crash-recovery audio remains backward-compatible until the versioned journal-header migration lands.
