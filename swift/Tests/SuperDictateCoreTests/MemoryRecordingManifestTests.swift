@@ -112,21 +112,6 @@ extension ProductStateTests {
     func testDecodedManifestCannotBypassDuplicateSequenceValidation() throws {
         let first = try memoryChunk(source: .microphone, sequence: 0)
         let second = try memoryChunk(source: .microphone, sequence: 0)
-        let duplicateJSON: [String: Any] = [
-            "recordingID": UUID().uuidString,
-            "createdAt": Date().timeIntervalSinceReferenceDate,
-            "state": SuperDictateMemorySessionState.recording.rawValue,
-            "chunks": [
-                try JSONSerialization.jsonObject(with: JSONEncoder().encode(first)),
-                try JSONSerialization.jsonObject(with: JSONEncoder().encode(second)),
-            ],
-        ]
-        let data = try JSONSerialization.data(withJSONObject: duplicateJSON)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .secondsSince1970
-
-        // Use a normal encoded manifest shell instead of relying on a hand-built
-        // Date encoding representation; then replace only the chunks array.
         let validShell = try SuperDictateMemoryRecordingManifest(
             recordingID: UUID(),
             createdAt: Date(timeIntervalSince1970: 10),
@@ -135,7 +120,10 @@ extension ProductStateTests {
         var shellObject = try XCTUnwrap(
             JSONSerialization.jsonObject(with: JSONEncoder().encode(validShell)) as? [String: Any]
         )
-        shellObject["chunks"] = duplicateJSON["chunks"]
+        shellObject["chunks"] = [
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(first)),
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(second)),
+        ]
         let tampered = try JSONSerialization.data(withJSONObject: shellObject)
 
         XCTAssertThrowsError(
