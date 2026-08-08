@@ -48,6 +48,28 @@ public enum SuperDictateSettingsUpdateState: Equatable, Sendable {
     case failed(message: String)
 }
 
+/// Product-level retention choices intentionally mirror the current runtime's
+/// bounded transcript-history contract. Keeping the enum in Core gives the native
+/// Settings UI a typed control instead of a boolean plus a free-form label that
+/// can drift out of sync.
+public enum SuperDictateHistoryRetention: String, Codable, CaseIterable, Sendable, Identifiable {
+    case off
+    case last1 = "1"
+    case last5 = "5"
+    case last10 = "10"
+
+    public var id: String { rawValue }
+
+    public var maximumEntryCount: Int {
+        switch self {
+        case .off: return 0
+        case .last1: return 1
+        case .last5: return 5
+        case .last10: return 10
+        }
+    }
+}
+
 /// User-facing projection of the existing runtime settings and service state.
 ///
 /// This is deliberately not a second persistence model. The legacy/runtime
@@ -66,8 +88,7 @@ public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
     public var speechModelDetail: String?
     public var speechModelReady: Bool
 
-    public var historyEnabled: Bool
-    public var historyLimitDescription: String
+    public var historyRetention: SuperDictateHistoryRetention
     public var libraryRecordingCount: Int
 
     public var serviceState: SuperDictateServiceState
@@ -85,8 +106,7 @@ public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
         speechModelName: String,
         speechModelDetail: String? = nil,
         speechModelReady: Bool,
-        historyEnabled: Bool,
-        historyLimitDescription: String,
+        historyRetention: SuperDictateHistoryRetention,
         libraryRecordingCount: Int,
         serviceState: SuperDictateServiceState,
         permissions: [SuperDictatePermissionStatus],
@@ -102,13 +122,16 @@ public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
         self.speechModelName = speechModelName
         self.speechModelDetail = Self.nonEmpty(speechModelDetail)
         self.speechModelReady = speechModelReady
-        self.historyEnabled = historyEnabled
-        self.historyLimitDescription = historyLimitDescription
+        self.historyRetention = historyRetention
         self.libraryRecordingCount = max(0, libraryRecordingCount)
         self.serviceState = serviceState
         self.permissions = permissions
         self.appVersion = appVersion
         self.updateState = updateState
+    }
+
+    public var historyEnabled: Bool {
+        historyRetention != .off
     }
 
     public var missingPermissions: [SuperDictatePermissionStatus] {
@@ -130,10 +153,11 @@ public enum SuperDictateSettingsCommand: Equatable, Sendable {
     case editShortcuts
     case setRemoveFillerWords(Bool)
     case openModelManager
-    case setHistoryEnabled(Bool)
-    /// Explicit durable Library deletion. This is intentionally distinct from
-    /// removing rows from the bounded recent-history cache.
-    case clearLibraryHistory
+    case setHistoryRetention(SuperDictateHistoryRetention)
+    /// Explicit transcript-history deletion. The agent must clear both the
+    /// bounded recent cache and the durable Library so the next migration cannot
+    /// immediately recreate data the user just asked to remove.
+    case clearTranscriptHistory
     case openPermission(SuperDictatePermissionKind)
     case startService
     case restartService
