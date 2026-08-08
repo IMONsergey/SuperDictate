@@ -11,6 +11,7 @@ private enum MemoryMicrophoneCaptureFailure: Error, Equatable, Sendable {
     case streamBackpressure
     case writerFailed
     case captureFailed
+    case aborted
 }
 
 private final class MemoryMicrophoneFailureBox: @unchecked Sendable {
@@ -32,12 +33,6 @@ private final class MemoryMicrophoneFailureBox: @unchecked Sendable {
     }
 }
 
-/// Independent long-form microphone source for Memory Capture.
-///
-/// This intentionally does not reuse or modify Instant Dictation's `AudioCapture`.
-/// The existing hotkey/ASR path keeps its proven callback/converter behavior. This
-/// adapter exists only for future Memory sessions and writes through the
-/// crash-safe Memory package transaction.
 @MainActor
 final class MemoryMicrophoneCaptureAdapter {
     private enum Lifecycle {
@@ -172,9 +167,7 @@ final class MemoryMicrophoneCaptureAdapter {
             continuation.finish()
             await consumerTask?.value
             await writer.abandonForRecovery()
-            self.continuation = nil
-            self.consumerTask = nil
-            self.failureBox = nil
+            clearStreamingState()
             terminalFailure = .captureFailed
             lifecycle = .failed
             throw error
@@ -199,10 +192,8 @@ final class MemoryMicrophoneCaptureAdapter {
         continuation?.finish()
         await consumerTask?.value
 
-        continuation = nil
-        consumerTask = nil
         let failure = failureBox?.value()
-        failureBox = nil
+        clearStreamingState()
 
         if let failure {
             await writer.abandonForRecovery()
@@ -220,5 +211,27 @@ final class MemoryMicrophoneCaptureAdapter {
             lifecycle = .failed
             throw error
         }
+    }
+
+    /// Abort a partially started/running source without promoting the current CAF
+    /// to a finalized manifest chunk. Any `.partial` bytes stay in the package so
+    /// source recovery can quarantine/inspect them. Used when another required
+    /// track fails during a multi-source session startup.
+    func abortForRecovery() async {
+        guard lifecycle == .running else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        continuation?.finish()
+        await consumerTask?.value
+        await writer.abandonForRecovery()
+        clearStreamingState()
+        terminalFailure = .aborted
+        lifecycle = .failed
+    }
+
+    private func clearStreamingState() {
+        continuation = nil
+        consumerTask = nil
+        failureBox = nil
     }
 }
