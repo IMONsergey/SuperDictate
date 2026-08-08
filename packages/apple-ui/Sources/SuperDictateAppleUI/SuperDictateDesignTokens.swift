@@ -1,11 +1,17 @@
 import SwiftUI
 
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
+
 /// Native semantic design tokens for SuperDictate.
 ///
 /// The machine-readable source of truth lives in `design/superdictate.tokens.json`.
 /// Apple UI deliberately resolves color and typography through system APIs instead
-/// of copying literal web palette values. This preserves macOS accent color,
-/// Dark Mode, Increased Contrast and future platform material behavior.
+/// of copying literal web palette values. This preserves platform accent color,
+/// Dark Mode, Increased Contrast and future system material behavior.
 public enum SuperDictateDesign {
     public enum Spacing {
         public static let micro: CGFloat = 4
@@ -45,19 +51,19 @@ public enum SuperDictateDesign {
     }
 
     public enum ColorRole {
-        /// Primary content label. Resolves with the OS instead of a fixed RGB value.
+        /// Primary content labels always resolve through the OS.
         public static let textPrimary: Color = .primary
         public static let textSecondary: Color = .secondary
-        public static let textTertiary: Color = Color(nsColor: .tertiaryLabelColor)
+        public static let textTertiary: Color = platformTertiaryLabel
 
-        public static let canvas: Color = Color(nsColor: .windowBackgroundColor)
-        public static let surfaceSecondary: Color = Color(nsColor: .controlBackgroundColor)
-        public static let surfaceTertiary: Color = Color(nsColor: .underPageBackgroundColor)
+        public static let canvas: Color = platformCanvas
+        public static let surfaceSecondary: Color = platformSecondarySurface
+        public static let surfaceTertiary: Color = platformTertiarySurface
 
-        public static let borderSubtle: Color = Color(nsColor: .separatorColor).opacity(0.58)
-        public static let borderDefault: Color = Color(nsColor: .separatorColor)
+        public static let borderSubtle: Color = platformSeparator.opacity(0.58)
+        public static let borderDefault: Color = platformSeparator
 
-        /// Generic interactive emphasis follows the user's macOS accent color.
+        /// Generic interactive emphasis follows the user's platform accent color.
         public static let actionPrimary: Color = .accentColor
         public static let recording: Color = .red
         public static let success: Color = .green
@@ -73,8 +79,58 @@ public enum SuperDictateDesign {
     }
 }
 
+private var platformTertiaryLabel: Color {
+    #if os(macOS)
+    Color(nsColor: .tertiaryLabelColor)
+    #elseif os(iOS)
+    Color(uiColor: .tertiaryLabel)
+    #else
+    .secondary.opacity(0.72)
+    #endif
+}
+
+private var platformCanvas: Color {
+    #if os(macOS)
+    Color(nsColor: .windowBackgroundColor)
+    #elseif os(iOS)
+    Color(uiColor: .systemBackground)
+    #else
+    Color.clear
+    #endif
+}
+
+private var platformSecondarySurface: Color {
+    #if os(macOS)
+    Color(nsColor: .controlBackgroundColor)
+    #elseif os(iOS)
+    Color(uiColor: .secondarySystemBackground)
+    #else
+    Color.secondary.opacity(0.08)
+    #endif
+}
+
+private var platformTertiarySurface: Color {
+    #if os(macOS)
+    Color(nsColor: .underPageBackgroundColor)
+    #elseif os(iOS)
+    Color(uiColor: .tertiarySystemBackground)
+    #else
+    Color.secondary.opacity(0.05)
+    #endif
+}
+
+private var platformSeparator: Color {
+    #if os(macOS)
+    Color(nsColor: .separatorColor)
+    #elseif os(iOS)
+    Color(uiColor: .separator)
+    #else
+    Color.secondary.opacity(0.24)
+    #endif
+}
+
 public extension View {
-    /// Keeps document-style content readable on large Mac windows while still
+    /// Keeps document-style content readable on large windows while still
     /// allowing the surrounding split view to grow naturally.
     func superDictateReadableDocument() -> some View {
         frame(maxWidth: SuperDictateDesign.Layout.documentMaxReadableWidth, alignment: .leading)
