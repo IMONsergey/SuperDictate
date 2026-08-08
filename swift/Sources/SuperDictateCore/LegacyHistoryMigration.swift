@@ -1,39 +1,50 @@
 import CryptoKit
 import Foundation
 
+/// Runtime-history projection accepted by the durable Library migrator.
+///
+/// Old history rows only know transcript text + ASR processing duration. Newer
+/// runtime rows may additionally provide a real recording UUID, capture time and
+/// source-audio duration. ASR duration is deliberately kept separate from audio
+/// duration so the product never presents processing time as recording length.
 public struct SuperDictateLegacyHistoryEntry: Equatable, Sendable {
     public var text: String
     public var transcriptionDurationSeconds: Double?
+    public var recordingID: UUID?
+    public var createdAt: Date?
+    public var sourceAudioDurationSeconds: Double?
 
     public init(
         text: String,
-        transcriptionDurationSeconds: Double? = nil
+        transcriptionDurationSeconds: Double? = nil,
+        recordingID: UUID? = nil,
+        createdAt: Date? = nil,
+        sourceAudioDurationSeconds: Double? = nil
     ) {
         self.text = text
-        if let duration = transcriptionDurationSeconds,
-           duration.isFinite,
-           duration >= 0 {
-            self.transcriptionDurationSeconds = duration
-        } else {
-            self.transcriptionDurationSeconds = nil
-        }
+        self.transcriptionDurationSeconds = Self.validDuration(transcriptionDurationSeconds)
+        self.recordingID = recordingID
+        self.createdAt = createdAt
+        self.sourceAudioDurationSeconds = Self.validDuration(sourceAudioDurationSeconds)
+    }
+
+    private static func validDuration(_ value: Double?) -> Double? {
+        guard let value, value.isFinite, value >= 0 else { return nil }
+        return value
     }
 }
 
-/// One-way projection from the pre-Library transcript archive into stable
-/// product identities.
+/// One-way projection from runtime transcript history into durable product rows.
 ///
-/// The UUID algorithm intentionally matches the already-shipped temporary
-/// identity in `ProductRuntimeBridge.swift`: normalized transcript text plus
-/// duplicate occurrence ordinal. This prevents a legacy row from changing ID
-/// when it moves from the live bridge snapshot into the persisted Library.
-///
-/// Legacy capture chronology does not exist. `createdAt` therefore stays nil.
+/// Legacy rows without an explicit recording identity retain the historical
+/// deterministic text+occurrence UUID. Rows with a real runtime UUID preserve it.
+/// Explicit-ID rows do not advance the legacy duplicate occurrence counter, so
+/// adding newer metadata-rich rows cannot silently renumber old legacy IDs.
 public enum SuperDictateLegacyHistoryMigrator {
     public static func recordings(
         from entries: [SuperDictateLegacyHistoryEntry]
     ) -> [SuperDictateRecording] {
-        var occurrences: [String: Int] = [:]
+        var legacyOccurrences: [String: Int] = [:]
         var result: [SuperDictateRecording] = []
         result.reserveCapacity(entries.count)
 
@@ -41,17 +52,23 @@ public enum SuperDictateLegacyHistoryMigrator {
             let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
 
-            let occurrence = occurrences[text, default: 0]
-            occurrences[text] = occurrence + 1
+            let occurrence = legacyOccurrences[text, default: 0]
+            let id: UUID
+            if let recordingID = entry.recordingID {
+                id = recordingID
+            } else {
+                id = stableRecordingID(text: text, occurrence: occurrence)
+                legacyOccurrences[text] = occurrence + 1
+            }
 
             result.append(
                 SuperDictateRecording(
-                    id: stableRecordingID(text: text, occurrence: occurrence),
+                    id: id,
                     title: suggestedTitle(from: text),
                     transcript: text,
                     summary: nil,
-                    createdAt: nil,
-                    durationSeconds: entry.transcriptionDurationSeconds,
+                    createdAt: entry.createdAt,
+                    durationSeconds: entry.sourceAudioDurationSeconds,
                     people: [],
                     requiresAttention: false
                 )
@@ -72,8 +89,7 @@ public enum SuperDictateLegacyHistoryMigrator {
         )
     }
 
-    /// Public so the runtime bridge can eventually delegate to the same source
-    /// of truth and delete its temporary duplicate implementation.
+    /// Stable fallback identity for pre-metadata history rows only.
     public static func stableRecordingID(
         text: String,
         occurrence: Int

@@ -29,7 +29,7 @@ final class LegacyHistoryMigrationTests: XCTestCase {
         )
     }
 
-    func testDuplicateRowsReceiveDistinctStableIdentities() {
+    func testDuplicateLegacyRowsReceiveDistinctStableIdentities() {
         let entries = [
             SuperDictateLegacyHistoryEntry(text: "Same words"),
             SuperDictateLegacyHistoryEntry(text: "Same words"),
@@ -48,12 +48,12 @@ final class LegacyHistoryMigrationTests: XCTestCase {
         )
     }
 
-    func testUnknownChronologyStaysUnknownWhileKnownTimingSurvives() throws {
+    func testLegacyASRDurationIsNotPresentedAsRecordingDuration() throws {
         let migrated = try XCTUnwrap(
             SuperDictateLegacyHistoryMigrator.recordings(
                 from: [
                     SuperDictateLegacyHistoryEntry(
-                        text: "Timed transcript",
+                        text: "Timed ASR transcript",
                         transcriptionDurationSeconds: 2.75
                     ),
                 ]
@@ -61,23 +61,68 @@ final class LegacyHistoryMigrationTests: XCTestCase {
         )
 
         XCTAssertNil(migrated.createdAt)
-        XCTAssertEqual(migrated.durationSeconds, 2.75)
+        XCTAssertNil(migrated.durationSeconds)
     }
 
-    func testInvalidDurationsNormalizeToUnknown() {
-        let migrated = SuperDictateLegacyHistoryMigrator.recordings(
+    func testRealRuntimeMetadataSurvivesProjection() throws {
+        let id = UUID()
+        let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let migrated = try XCTUnwrap(
+            SuperDictateLegacyHistoryMigrator.recordings(
+                from: [
+                    SuperDictateLegacyHistoryEntry(
+                        text: "Metadata rich transcript",
+                        transcriptionDurationSeconds: 0.8,
+                        recordingID: id,
+                        createdAt: createdAt,
+                        sourceAudioDurationSeconds: 12.5
+                    ),
+                ]
+            ).first
+        )
+
+        XCTAssertEqual(migrated.id, id)
+        XCTAssertEqual(migrated.createdAt, createdAt)
+        XCTAssertEqual(migrated.durationSeconds, 12.5)
+    }
+
+    func testExplicitIDRowsDoNotRenumberLegacyDuplicateFallbackIDs() {
+        let legacyOnly = SuperDictateLegacyHistoryMigrator.recordings(
             from: [
-                SuperDictateLegacyHistoryEntry(
-                    text: "Negative",
-                    transcriptionDurationSeconds: -1
-                ),
-                SuperDictateLegacyHistoryEntry(
-                    text: "Infinite",
-                    transcriptionDurationSeconds: .infinity
-                ),
+                SuperDictateLegacyHistoryEntry(text: "Same words"),
+                SuperDictateLegacyHistoryEntry(text: "Same words"),
+            ]
+        )
+        let mixed = SuperDictateLegacyHistoryMigrator.recordings(
+            from: [
+                SuperDictateLegacyHistoryEntry(text: "Same words", recordingID: UUID()),
+                SuperDictateLegacyHistoryEntry(text: "Same words"),
+                SuperDictateLegacyHistoryEntry(text: "Same words"),
             ]
         )
 
+        XCTAssertEqual(Array(mixed.dropFirst()).map(\.id), legacyOnly.map(\.id))
+    }
+
+    func testInvalidDurationsNormalizeToUnknown() {
+        let entries = [
+            SuperDictateLegacyHistoryEntry(
+                text: "Negative",
+                transcriptionDurationSeconds: -1,
+                sourceAudioDurationSeconds: -2
+            ),
+            SuperDictateLegacyHistoryEntry(
+                text: "Infinite",
+                transcriptionDurationSeconds: .infinity,
+                sourceAudioDurationSeconds: .infinity
+            ),
+        ]
+        XCTAssertNil(entries[0].transcriptionDurationSeconds)
+        XCTAssertNil(entries[0].sourceAudioDurationSeconds)
+        XCTAssertNil(entries[1].transcriptionDurationSeconds)
+        XCTAssertNil(entries[1].sourceAudioDurationSeconds)
+
+        let migrated = SuperDictateLegacyHistoryMigrator.recordings(from: entries)
         XCTAssertNil(migrated[0].durationSeconds)
         XCTAssertNil(migrated[1].durationSeconds)
     }
