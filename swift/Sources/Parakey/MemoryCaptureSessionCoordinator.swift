@@ -21,9 +21,9 @@ struct MemoryCaptureSessionResult: Equatable, Sendable {
 /// First production coordinator for long-form Memory Capture.
 ///
 /// This v1 intentionally owns only the microphone source. The package and chunk
-/// contracts already support a separate `.system` track, so ScreenCaptureKit can
-/// join the same session later without changing source identity or mixing audio
-/// before storage. Nothing here touches Instant Dictation's hotkey/audio runtime.
+/// contracts already support a separate `.system` track, and the host-time anchor
+/// is allocated before capture so future ScreenCaptureKit audio can share the same
+/// real session timeline without mixing source files.
 @MainActor
 final class MemoryCaptureSessionCoordinator {
     private enum Lifecycle {
@@ -38,6 +38,7 @@ final class MemoryCaptureSessionCoordinator {
     private var lifecycle: Lifecycle = .idle
     private var recordingID: UUID?
     private var createdAt: Date?
+    private var clockAnchor: MemoryCaptureClockAnchor?
     private var microphone: MemoryMicrophoneCaptureAdapter?
     private var readyResult: MemoryCaptureSessionResult?
 
@@ -56,6 +57,7 @@ final class MemoryCaptureSessionCoordinator {
 
         let recordingID = UUID()
         let createdAt = Date()
+        let clockAnchor = MemoryCaptureClockAnchor.now()
         _ = try await store.createPackage(
             recordingID: recordingID,
             createdAt: createdAt
@@ -67,10 +69,14 @@ final class MemoryCaptureSessionCoordinator {
             source: .microphone,
             committer: committer
         )
-        let microphone = MemoryMicrophoneCaptureAdapter(writer: writer)
+        let microphone = MemoryMicrophoneCaptureAdapter(
+            writer: writer,
+            clockAnchor: clockAnchor
+        )
 
         self.recordingID = recordingID
         self.createdAt = createdAt
+        self.clockAnchor = clockAnchor
         self.microphone = microphone
 
         do {
