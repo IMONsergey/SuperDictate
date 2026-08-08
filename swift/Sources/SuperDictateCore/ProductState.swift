@@ -127,6 +127,19 @@ public struct SuperDictateProductSnapshot: Codable, Equatable, Sendable {
         status == .recording
     }
 
+    /// The visible Record/Stop control is actionable only when the runtime can
+    /// honor it truthfully. Starting while transcription is already in flight or
+    /// while permissions/service recovery is required would produce a dead/fake
+    /// control, so those states disable the command.
+    public var isPrimaryCaptureCommandEnabled: Bool {
+        switch status {
+        case .idle, .ready, .recording:
+            return true
+        case .transcribing, .needsAttention:
+            return false
+        }
+    }
+
     public var primaryCaptureCommand: SuperDictateCommand {
         isCaptureActive ? .stopRecording : .startRecording
     }

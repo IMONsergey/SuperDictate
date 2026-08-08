@@ -8,9 +8,14 @@ import SuperDictateCore
 @MainActor
 public final class SuperDictateMainModel: ObservableObject {
     @Published public var snapshot: SuperDictateProductSnapshot
+    @Published public var language: SuperDictateInterfaceLanguage
 
-    public init(snapshot: SuperDictateProductSnapshot = SuperDictateProductSnapshot()) {
+    public init(
+        snapshot: SuperDictateProductSnapshot = SuperDictateProductSnapshot(),
+        language: SuperDictateInterfaceLanguage = .english
+    ) {
         self.snapshot = snapshot
+        self.language = language
     }
 }
 
@@ -30,6 +35,10 @@ public struct SuperDictateLiveMainView: View {
     }
 
     public var body: some View {
-        SuperDictateMainView(snapshot: model.snapshot, onCommand: onCommand)
+        SuperDictateMainView(
+            snapshot: model.snapshot,
+            language: model.language,
+            onCommand: onCommand
+        )
     }
 }
