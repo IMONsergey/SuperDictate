@@ -38,8 +38,9 @@ public enum SuperDictateMemoryChunkCommitError: Error, Equatable, Sendable {
 /// exact temporary URL from this actor, write and close a CAF/Linear PCM file,
 /// then hand that URL back here. Core owns the source-truth transaction:
 ///
-/// partial regular file → fsync → atomic rename → directory fsync → streaming
-/// SHA-256 → single-writer manifest append.
+/// partial regular file → fsync → prepared journal fsync → atomic rename →
+/// directory fsync → streaming SHA-256 → single-writer manifest append →
+/// best-effort committed journal marker.
 ///
 /// Once the rename succeeds this type never deletes the finalized bytes. Any
 /// later failure becomes `recoveryRequired`, allowing a package recovery pass to
@@ -123,6 +124,24 @@ public actor SuperDictateMemoryAudioChunkCommitter {
         let byteLength = try flushAndValidateTemporaryFile(temporaryURL)
         let finalURL = Self.finalizedURL(from: temporaryURL, partialSuffix: policy.partialSuffix)
         try assertDestinationAbsent(finalURL)
+        let relativePath = "audio/\(source.rawValue)/\(finalURL.lastPathComponent)"
+
+        let prepared = try recoveryEvent(
+            kind: .chunkPrepared,
+            recordingID: recordingID,
+            source: source,
+            sequence: sequence,
+            chunkID: chunkID,
+            relativePath: relativePath,
+            sessionStartMilliseconds: sessionStartMilliseconds,
+            sessionEndMilliseconds: sessionEndMilliseconds,
+            sampleRate: sampleRate,
+            channelCount: channelCount,
+            byteLength: byteLength
+        )
+        // This fsynced event is the proof required to reconstruct descriptor
+        // metadata after a crash between rename and manifest commit.
+        try await store.appendRecoveryEvent(prepared)
 
         guard Darwin.rename(temporaryURL.path, finalURL.path) == 0 else {
             throw SuperDictateMemoryChunkCommitError.posix(errno)
@@ -131,7 +150,6 @@ public actor SuperDictateMemoryAudioChunkCommitter {
 
         do {
             let checksum = try sha256Hex(finalURL)
-            let relativePath = "audio/\(source.rawValue)/\(finalURL.lastPathComponent)"
             let descriptor = try SuperDictateMemoryAudioChunk(
                 id: chunkID,
                 source: source,
@@ -151,6 +169,26 @@ public actor SuperDictateMemoryAudioChunkCommitter {
                 recordingID: recordingID,
                 chunk: descriptor
             )
+
+            // Once manifest.json includes the descriptor, the source is durable
+            // even if this advisory marker cannot be appended. Recovery treats a
+            // prepared event whose chunk already exists in the manifest as
+            // committed truth rather than failing a successful capture.
+            if let committed = try? recoveryEvent(
+                kind: .chunkCommitted,
+                recordingID: recordingID,
+                source: source,
+                sequence: sequence,
+                chunkID: chunkID,
+                relativePath: relativePath,
+                sessionStartMilliseconds: sessionStartMilliseconds,
+                sessionEndMilliseconds: sessionEndMilliseconds,
+                sampleRate: sampleRate,
+                channelCount: channelCount,
+                byteLength: byteLength
+            ) {
+                try? await store.appendRecoveryEvent(committed)
+            }
             return descriptor
         } catch {
             throw SuperDictateMemoryChunkCommitError.recoveryRequired(
@@ -158,6 +196,36 @@ public actor SuperDictateMemoryAudioChunkCommitter {
                 chunkID: chunkID
             )
         }
+    }
+
+    private func recoveryEvent(
+        kind: SuperDictateMemoryRecoveryEventKind,
+        recordingID: UUID,
+        source: SuperDictateMemoryAudioSource,
+        sequence: Int,
+        chunkID: UUID,
+        relativePath: String,
+        sessionStartMilliseconds: Int64,
+        sessionEndMilliseconds: Int64,
+        sampleRate: Int,
+        channelCount: Int,
+        byteLength: Int64
+    ) throws -> SuperDictateMemoryRecoveryEvent {
+        try SuperDictateMemoryRecoveryEvent(
+            kind: kind,
+            recordingID: recordingID,
+            chunkID: chunkID,
+            source: source,
+            sequence: sequence,
+            relativePath: relativePath,
+            sessionStartMilliseconds: sessionStartMilliseconds,
+            sessionEndMilliseconds: sessionEndMilliseconds,
+            container: .caf,
+            codec: .linearPCM,
+            sampleRate: sampleRate,
+            channelCount: channelCount,
+            byteLength: byteLength
+        )
     }
 
     private func flushAndValidateTemporaryFile(_ url: URL) throws -> Int64 {
