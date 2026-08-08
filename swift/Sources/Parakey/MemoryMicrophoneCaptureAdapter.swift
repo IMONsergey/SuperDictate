@@ -3,16 +3,15 @@ import Foundation
 import SuperDictateCore
 
 private enum MemoryMicrophoneCaptureFailure: Error, Equatable, Sendable {
-    case alreadyRunning
+    case alreadyStarted
     case invalidInputChannelCount(Int)
     case invalidInputFormat
     case pcmCopyFailed
     case streamBackpressure
     case writerFailed
+    case captureFailed
 }
 
-/// Small lock-protected first-error box shared by the realtime-ish AVAudioEngine
-/// callback and the async stream consumer. No transcript/audio payload enters it.
 private final class MemoryMicrophoneFailureBox: @unchecked Sendable {
     private let lock = NSLock()
     private var stored: MemoryMicrophoneCaptureFailure?
@@ -32,9 +31,6 @@ private final class MemoryMicrophoneFailureBox: @unchecked Sendable {
     }
 }
 
-/// Serial source-timeline calculator for the AVAudioEngine tap callback. Prefer
-/// AVAudioTime sample positions; if they are unavailable, continue from the
-/// previously observed frame count. The object never escapes this capture adapter.
 private final class MemoryMicrophoneTimeline: @unchecked Sendable {
     private let lock = NSLock()
     private var firstSampleTime: AVAudioFramePosition?
@@ -76,13 +72,22 @@ private final class MemoryMicrophoneTimeline: @unchecked Sendable {
 /// crash-safe Memory package transaction.
 @MainActor
 final class MemoryMicrophoneCaptureAdapter {
+    private enum Lifecycle {
+        case idle
+        case running
+        case finished
+        case failed
+    }
+
     private let engine: AVAudioEngine
     private let writer: MemoryCAFChunkWriter
 
+    private var lifecycle: Lifecycle = .idle
     private var continuation: AsyncStream<SuperDictateMemoryPCMBlock>.Continuation?
     private var consumerTask: Task<Void, Never>?
     private var failureBox: MemoryMicrophoneFailureBox?
-    private var isRunning = false
+    private var finalChunks: [SuperDictateMemoryAudioChunk] = []
+    private var terminalFailure: MemoryMicrophoneCaptureFailure?
 
     init(
         writer: MemoryCAFChunkWriter,
@@ -93,8 +98,8 @@ final class MemoryMicrophoneCaptureAdapter {
     }
 
     func start() async throws {
-        guard !isRunning else {
-            throw MemoryMicrophoneCaptureFailure.alreadyRunning
+        guard lifecycle == .idle else {
+            throw MemoryMicrophoneCaptureFailure.alreadyStarted
         }
 
         let input = engine.inputNode
@@ -166,9 +171,6 @@ final class MemoryMicrophoneCaptureAdapter {
             case .enqueued:
                 break
             case .dropped:
-                // A long-form source recorder must never silently skip callback
-                // audio. Stop accepting source and let recovery isolate the open
-                // partial chunk instead of presenting a complete recording.
                 failureBox.record(.streamBackpressure)
                 continuation.finish()
             case .terminated:
@@ -182,7 +184,7 @@ final class MemoryMicrophoneCaptureAdapter {
         do {
             engine.prepare()
             try engine.start()
-            isRunning = true
+            lifecycle = .running
         } catch {
             input.removeTap(onBus: 0)
             continuation.finish()
@@ -191,16 +193,26 @@ final class MemoryMicrophoneCaptureAdapter {
             self.continuation = nil
             self.consumerTask = nil
             self.failureBox = nil
+            terminalFailure = .captureFailed
+            lifecycle = .failed
             throw error
         }
     }
 
-    /// Stop capture, drain all accepted callback blocks and finalize the last CAF
-    /// only when the whole bounded pipeline remained healthy.
+    /// Stop capture, drain every accepted callback block and finalize the last
+    /// CAF only when the bounded pipeline remained healthy. A second stop after a
+    /// successful finish is idempotent; a failed session remains failed.
     @discardableResult
     func stop() async throws -> [SuperDictateMemoryAudioChunk] {
-        guard isRunning else {
+        switch lifecycle {
+        case .idle:
             return []
+        case .finished:
+            return finalChunks
+        case .failed:
+            throw terminalFailure ?? .captureFailed
+        case .running:
+            break
         }
 
         engine.inputNode.removeTap(onBus: 0)
@@ -208,7 +220,6 @@ final class MemoryMicrophoneCaptureAdapter {
         continuation?.finish()
         await consumerTask?.value
 
-        isRunning = false
         continuation = nil
         consumerTask = nil
         let failure = failureBox?.value()
@@ -216,8 +227,19 @@ final class MemoryMicrophoneCaptureAdapter {
 
         if let failure {
             await writer.abandonForRecovery()
+            terminalFailure = failure
+            lifecycle = .failed
             throw failure
         }
-        return try await writer.finish()
+
+        do {
+            finalChunks = try await writer.finish()
+            lifecycle = .finished
+            return finalChunks
+        } catch {
+            terminalFailure = .writerFailed
+            lifecycle = .failed
+            throw error
+        }
     }
 }
