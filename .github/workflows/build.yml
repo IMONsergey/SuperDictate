@@ -6,33 +6,13 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   macos:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          ref: integration/native-product-window-v2
-          fetch-depth: 0
-      - name: Apply one-shot native product window hooks
-        run: |
-          python3 scripts/apply-native-product-window-v2.py
-          grep -q 'productCaptureCommandObserver = ProductCaptureCommandObserver' swift/Sources/Parakey/main.swift
-          grep -q 'NativeProductWindowController' swift/Sources/Parakey/main.swift
-          grep -q 'SuperDictate — System Status' swift/Sources/Parakey/main.swift
-          grep -q 'onCommand(.openSystemStatus)' swift/Sources/SuperDictateUI/SuperDictateMainView.swift
-          git diff --check
-          git fetch origin main
-          git show origin/main:.github/workflows/build.yml > .github/workflows/build.yml
-          rm -f scripts/apply-native-product-window-v2.py
-          rm -f .github/workflows/apply-native-product-window-v2.yml
-          git config user.name "SuperDictate automation"
-          git config user.email "actions@users.noreply.github.com"
-          git add -A
-          git commit -m "Wire native product window into runtime"
-          git push origin HEAD:integration/native-product-window-v2
       - name: Validate scripts and plists
         run: ./scripts/check.sh
       - name: Swift self-tests
