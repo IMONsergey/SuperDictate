@@ -172,11 +172,10 @@ public extension JSONSuperDictateMemoryPackageStore {
     static var maximumRecoveryJournalBytes: Int { 8 * 1_024 * 1_024 }
 
     func appendRecoveryEvent(_ event: SuperDictateMemoryRecoveryEvent) throws {
-        guard event.recordingID == event.recordingID else {
-            throw SuperDictateMemoryRecoveryJournalError.invalidMetadata
-        }
-        let package = packageURL(recordingID: event.recordingID)
-        guard FileManager.default.fileExists(atPath: package.path) else {
+        // Reuse the package store's hardened manifest read as the package
+        // boundary check. This rejects symlink/non-directory packages and
+        // mismatched manifests before a journal append can occur.
+        guard try loadManifest(recordingID: event.recordingID) != nil else {
             throw SuperDictateMemoryPackageStoreError.packageMissing(event.recordingID)
         }
 
@@ -224,6 +223,15 @@ public extension JSONSuperDictateMemoryPackageStore {
     func recoveryJournalSnapshot(
         recordingID: UUID
     ) throws -> SuperDictateMemoryRecoveryJournalSnapshot {
+        let packageURL = packageURL(recordingID: recordingID)
+        guard FileManager.default.fileExists(atPath: packageURL.path) else {
+            throw SuperDictateMemoryPackageStoreError.packageMissing(recordingID)
+        }
+        // The manifest read hardens the package path before following any child.
+        guard try loadManifest(recordingID: recordingID) != nil else {
+            throw SuperDictateMemoryPackageStoreError.manifestMissing(recordingID)
+        }
+
         let url = recoveryJournalURL(recordingID: recordingID)
         guard FileManager.default.fileExists(atPath: url.path) else {
             return SuperDictateMemoryRecoveryJournalSnapshot(events: [])
