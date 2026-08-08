@@ -10,14 +10,12 @@ private let PRODUCT_SETTINGS_VALUE_KEY = "value"
 private let PRODUCT_SETTINGS_SENDER_PID_KEY = "senderPID"
 
 /// Settings mutations whose side effects belong to the background agent.
-///
-/// These are intentionally narrower than `SuperDictateSettingsCommand`: window
-/// navigation, updater UI, service controls and permission panes remain owned by
-/// the visible control-panel runtime. Only settings that affect active dictation
-/// behavior or transcript-retention persistence cross this IPC boundary.
+/// UI-only navigation/updater/service/permission actions stay in the visible
+/// control-panel process; dictation behavior and history persistence cross this
+/// trust-gated boundary.
 enum ProductAgentSettingsCommand: Equatable, Sendable {
     case setRemoveFillerWords(Bool)
-    case setHistoryRetention(SuperDictateHistoryRetention)
+    case setRecentTranscriptMode(SuperDictateRecentTranscriptMode)
     case clearTranscriptHistory
 }
 
@@ -32,9 +30,9 @@ enum ProductSettingsCommandSender {
             userInfo[PRODUCT_SETTINGS_COMMAND_KEY] = "set_remove_filler_words"
             userInfo[PRODUCT_SETTINGS_VALUE_KEY] = NSNumber(value: enabled)
 
-        case .setHistoryRetention(let retention):
-            userInfo[PRODUCT_SETTINGS_COMMAND_KEY] = "set_history_retention"
-            userInfo[PRODUCT_SETTINGS_VALUE_KEY] = retention.rawValue
+        case .setRecentTranscriptMode(let mode):
+            userInfo[PRODUCT_SETTINGS_COMMAND_KEY] = "set_recent_transcript_mode"
+            userInfo[PRODUCT_SETTINGS_VALUE_KEY] = mode.rawValue
 
         case .clearTranscriptHistory:
             userInfo[PRODUCT_SETTINGS_COMMAND_KEY] = "clear_transcript_history"
@@ -100,12 +98,12 @@ final class ProductSettingsCommandObserver: NSObject {
             }
             return .setRemoveFillerWords(value.boolValue)
 
-        case "set_history_retention":
+        case "set_recent_transcript_mode":
             guard let value = userInfo[PRODUCT_SETTINGS_VALUE_KEY] as? String,
-                  let retention = SuperDictateHistoryRetention(rawValue: value) else {
+                  let mode = SuperDictateRecentTranscriptMode(rawValue: value) else {
                 return nil
             }
-            return .setHistoryRetention(retention)
+            return .setRecentTranscriptMode(mode)
 
         case "clear_transcript_history":
             return .clearTranscriptHistory
