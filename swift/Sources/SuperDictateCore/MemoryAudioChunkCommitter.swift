@@ -11,7 +11,8 @@ public struct SuperDictateMemoryChunkPolicy: Equatable, Sendable {
         partialSuffix: String = "partial"
     ) {
         self.maximumChunkBytes = max(1, maximumChunkBytes)
-        self.partialSuffix = partialSuffix
+        let normalizedSuffix = partialSuffix.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.partialSuffix = normalizedSuffix.isEmpty ? "partial" : normalizedSuffix
     }
 }
 
@@ -20,6 +21,7 @@ public enum SuperDictateMemoryChunkCommitError: Error, Equatable, Sendable {
     case unexpectedTemporaryPath
     case temporaryChunkMissing
     case unsafeFileType
+    case invalidContainer
     case emptyChunk
     case fileTooLarge(Int64, Int64)
     case destinationAlreadyExists(String)
@@ -85,6 +87,17 @@ public actor SuperDictateMemoryAudioChunkCommitter {
     ) async throws -> SuperDictateMemoryAudioChunk {
         guard sequence >= 0 else {
             throw SuperDictateMemoryChunkCommitError.invalidSequence(sequence)
+        }
+        // Metadata errors are caller errors and must fail before the durability
+        // boundary. Once rename succeeds, all later failures preserve bytes for
+        // package recovery rather than pretending the chunk never existed.
+        guard sessionStartMilliseconds >= 0,
+              sessionEndMilliseconds >= sessionStartMilliseconds else {
+            throw SuperDictateMemoryManifestError.invalidTiming
+        }
+        guard sampleRate > 0,
+              channelCount == 1 || channelCount == 2 else {
+            throw SuperDictateMemoryManifestError.invalidAudioFormat
         }
 
         let expectedTemporaryURL = try await temporaryChunkURL(
@@ -173,6 +186,19 @@ public actor SuperDictateMemoryAudioChunkCommitter {
                 Int64(st.st_size),
                 policy.maximumChunkBytes
             )
+        }
+
+        var magic = [UInt8](repeating: 0, count: 4)
+        let magicCount = magic.withUnsafeMutableBytes { bytes in
+            Darwin.pread(fd, bytes.baseAddress, bytes.count, 0)
+        }
+        guard magicCount == 4,
+              magic == Array("caff".utf8) else {
+            throw SuperDictateMemoryChunkCommitError.invalidContainer
+        }
+
+        guard Darwin.fchmod(fd, mode_t(0o600)) == 0 else {
+            throw SuperDictateMemoryChunkCommitError.posix(errno)
         }
         guard Darwin.fsync(fd) == 0 else {
             throw SuperDictateMemoryChunkCommitError.posix(errno)
