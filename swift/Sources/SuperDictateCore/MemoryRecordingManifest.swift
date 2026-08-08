@@ -165,12 +165,29 @@ public struct SuperDictateMemoryRecordingManifest: Codable, Equatable, Sendable 
         case issue
     }
 
+    /// New source packages always begin in `.recording`. Restored packages may
+    /// decode later states, but runtime code must use the explicit transition
+    /// methods below rather than constructing an arbitrary lifecycle state.
     public init(
         recordingID: UUID,
         createdAt: Date,
-        state: SuperDictateMemorySessionState = .recording,
-        chunks: [SuperDictateMemoryAudioChunk] = [],
-        issue: String? = nil
+        chunks: [SuperDictateMemoryAudioChunk] = []
+    ) throws {
+        try self.init(
+            recordingID: recordingID,
+            createdAt: createdAt,
+            state: .recording,
+            chunks: chunks,
+            issue: nil
+        )
+    }
+
+    private init(
+        recordingID: UUID,
+        createdAt: Date,
+        state: SuperDictateMemorySessionState,
+        chunks: [SuperDictateMemoryAudioChunk],
+        issue: String?
     ) throws {
         self.recordingID = recordingID
         self.createdAt = createdAt
