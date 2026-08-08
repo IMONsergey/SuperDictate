@@ -55,9 +55,37 @@ public extension JSONSuperDictateMemoryPackageStore {
     }
 }
 
-/// Core-only integrity mutation. Recovery may downgrade a previously-ready
-/// package only when physical source verification proves it unhealthy.
+/// Integrity-only package mutations. They remain internal to SuperDictateCore so
+/// ordinary capture adapters cannot bypass the public recording lifecycle.
 extension JSONSuperDictateMemoryPackageStore {
+    /// Reattach a source descriptor only after recovery independently verified
+    /// the immutable source bytes against durable journal evidence. Unlike the
+    /// public append path, this intentionally preserves a `.ready` manifest: a
+    /// crash may have lost the manifest mutation after the audio itself became
+    /// durable, but that does not reopen the recording for ordinary writes.
+    @discardableResult
+    func reattachVerifiedChunk(
+        recordingID: UUID,
+        chunk: SuperDictateMemoryAudioChunk
+    ) throws -> SuperDictateMemoryRecordingManifest {
+        guard var manifest = try loadManifest(recordingID: recordingID) else {
+            throw SuperDictateMemoryPackageStoreError.packageMissing(recordingID)
+        }
+
+        manifest.chunks.append(chunk)
+        do {
+            try manifest.validate()
+        } catch {
+            manifest.chunks.removeLast()
+            throw error
+        }
+
+        try saveManifest(manifest)
+        return manifest
+    }
+
+    /// Recovery may downgrade a previously-ready package only when physical
+    /// source verification proves it unhealthy.
     @discardableResult
     func markIntegrityNeedsAttention(
         recordingID: UUID,
