@@ -14,6 +14,7 @@ extension ProductStateTests {
         )
         XCTAssertEqual(block.channelCount, 2)
         XCTAssertEqual(block.frameCount, 4_800)
+        XCTAssertEqual(block.sampleRateHz, 48_000)
         XCTAssertEqual(block.durationMilliseconds, 100)
         XCTAssertEqual(block.sessionEndMilliseconds, 350)
     }
@@ -26,6 +27,18 @@ extension ProductStateTests {
                 sessionStartMilliseconds: 0
             )
         )
+        XCTAssertThrowsError(
+            try SuperDictateMemoryPCMBlock(
+                sampleRate: 48_000.5,
+                channels: [[0]],
+                sessionStartMilliseconds: 0
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? SuperDictateMemoryPCMBlockError,
+                .nonIntegralSampleRate(48_000.5)
+            )
+        }
         XCTAssertThrowsError(
             try SuperDictateMemoryPCMBlock(
                 sampleRate: 48_000,
