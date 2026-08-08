@@ -1,4 +1,5 @@
 import AVFoundation
+import Darwin
 import Foundation
 import SuperDictateCore
 
@@ -60,10 +61,6 @@ actor MemoryCAFChunkWriter {
         self.targetChunkMilliseconds = max(1_000, targetChunkMilliseconds)
     }
 
-    /// Append one source callback copy. Gaps are allowed because callbacks from
-    /// different capture APIs can have scheduling jitter; time may never move
-    /// backwards. A source-format change closes the current immutable chunk and
-    /// starts a new one instead of silently converting the authoritative audio.
     func append(_ block: SuperDictateMemoryPCMBlock) async throws {
         try requireActive()
 
@@ -103,10 +100,6 @@ actor MemoryCAFChunkWriter {
         }
     }
 
-    /// Finalize the active chunk and return every descriptor successfully made
-    /// authoritative in the package manifest during this writer lifetime.
-    /// Calling finish again is idempotent; an abandoned source can never be
-    /// promoted to a successful finish.
     func finish() async throws -> [SuperDictateMemoryAudioChunk] {
         switch lifecycle {
         case .finished:
@@ -120,11 +113,6 @@ actor MemoryCAFChunkWriter {
         }
     }
 
-    /// Close the active AVAudioFile without crossing the final commit boundary.
-    /// The `.partial` source stays on disk for package recovery/quarantine. This
-    /// is used when a capture callback, backpressure guard or writer operation
-    /// fails; silently deleting or pretending to finalize incomplete source would
-    /// violate Memory Capture's source-truth contract.
     func abandonForRecovery() {
         guard lifecycle == .active else { return }
         currentFile = nil
@@ -144,18 +132,13 @@ actor MemoryCAFChunkWriter {
 
     private func requireActive() throws {
         switch lifecycle {
-        case .active:
-            return
-        case .finished:
-            throw MemoryCAFChunkWriterError.writerFinished
-        case .abandoned:
-            throw MemoryCAFChunkWriterError.writerAbandoned
+        case .active: return
+        case .finished: throw MemoryCAFChunkWriterError.writerFinished
+        case .abandoned: throw MemoryCAFChunkWriterError.writerAbandoned
         }
     }
 
-    private func openChunk(
-        for block: SuperDictateMemoryPCMBlock
-    ) async throws {
+    private func openChunk(for block: SuperDictateMemoryPCMBlock) async throws {
         let sequence = nextSequence
         let chunkID = UUID()
         let temporaryURL = try await committer.temporaryChunkURL(
@@ -164,7 +147,6 @@ actor MemoryCAFChunkWriter {
             sequence: sequence,
             chunkID: chunkID
         )
-
         guard let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: block.sampleRate,
@@ -173,7 +155,6 @@ actor MemoryCAFChunkWriter {
         ) else {
             throw MemoryCAFChunkWriterError.unsupportedPCMBuffer
         }
-
         let file = try AVAudioFile(
             forWriting: temporaryURL,
             settings: format.settings,
@@ -195,9 +176,7 @@ actor MemoryCAFChunkWriter {
         currentEndMilliseconds = block.sessionStartMilliseconds
     }
 
-    private func write(
-        _ block: SuperDictateMemoryPCMBlock
-    ) throws {
+    private func write(_ block: SuperDictateMemoryPCMBlock) throws {
         guard let file = currentFile,
               let format = currentFormat else {
             throw MemoryCAFChunkWriterError.missingOpenChunkState
@@ -211,7 +190,6 @@ actor MemoryCAFChunkWriter {
             throw MemoryCAFChunkWriterError.bufferAllocationFailed
         }
         buffer.frameLength = frameCount
-
         guard let channelData = buffer.floatChannelData else {
             throw MemoryCAFChunkWriterError.unsupportedPCMBuffer
         }
@@ -241,8 +219,6 @@ actor MemoryCAFChunkWriter {
             throw MemoryCAFChunkWriterError.missingOpenChunkState
         }
 
-        // Drop the final strong AVAudioFile reference before the committer opens
-        // the file descriptor, ensuring AVFoundation has closed/flushed its CAF.
         currentFile = nil
         currentFormat = nil
         currentSequence = nil
