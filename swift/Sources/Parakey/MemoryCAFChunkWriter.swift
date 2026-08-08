@@ -18,7 +18,7 @@ public enum MemoryCAFChunkWriterError: Error, Equatable, Sendable {
 /// untouched.
 actor MemoryCAFChunkWriter {
     private struct FormatKey: Equatable, Sendable {
-        let sampleRate: Double
+        let sampleRateHz: Int
         let channelCount: Int
     }
 
@@ -65,7 +65,7 @@ actor MemoryCAFChunkWriter {
         }
 
         let incomingFormat = FormatKey(
-            sampleRate: block.sampleRate,
+            sampleRateHz: block.sampleRateHz,
             channelCount: block.channelCount
         )
 
@@ -97,6 +97,22 @@ actor MemoryCAFChunkWriter {
     func finish() async throws -> [SuperDictateMemoryAudioChunk] {
         try await finalizeCurrentChunk()
         return committedChunks
+    }
+
+    /// Close the active AVAudioFile without crossing the final commit boundary.
+    /// The `.partial` source stays on disk for package recovery/quarantine. This
+    /// is used when a capture callback, backpressure guard or writer operation
+    /// fails; silently deleting or pretending to finalize incomplete source would
+    /// violate Memory Capture's source-truth contract.
+    func abandonForRecovery() {
+        currentFile = nil
+        currentFormat = nil
+        currentSequence = nil
+        currentChunkID = nil
+        currentTemporaryURL = nil
+        currentFormatKey = nil
+        currentStartMilliseconds = nil
+        currentEndMilliseconds = nil
     }
 
     var committedChunkCount: Int {
@@ -138,7 +154,7 @@ actor MemoryCAFChunkWriter {
         currentFile = file
         currentFormat = format
         currentFormatKey = FormatKey(
-            sampleRate: block.sampleRate,
+            sampleRateHz: block.sampleRateHz,
             channelCount: block.channelCount
         )
         currentStartMilliseconds = block.sessionStartMilliseconds
@@ -210,7 +226,7 @@ actor MemoryCAFChunkWriter {
             temporaryURL: temporaryURL,
             sessionStartMilliseconds: startMilliseconds,
             sessionEndMilliseconds: endMilliseconds,
-            sampleRate: Int(formatKey.sampleRate.rounded()),
+            sampleRate: formatKey.sampleRateHz,
             channelCount: formatKey.channelCount
         )
         committedChunks.append(descriptor)
