@@ -28,7 +28,10 @@ public struct SuperDictatePermissionStatus: Codable, Equatable, Sendable, Identi
 
     public var id: String { kind.rawValue }
 
-    public init(kind: SuperDictatePermissionKind, state: SuperDictatePermissionState) {
+    public init(
+        kind: SuperDictatePermissionKind,
+        state: SuperDictatePermissionState
+    ) {
         self.kind = kind
         self.state = state
     }
@@ -41,10 +44,14 @@ public enum SuperDictateServiceState: String, Codable, Sendable {
     case needsAttention = "needs_attention"
 }
 
+/// User-facing updater state. Installation/preparation is distinct from an
+/// update check so the UI never collapses a real in-progress install into a
+/// misleading generic "Checking…" state.
 public enum SuperDictateSettingsUpdateState: Equatable, Sendable {
     case checking
     case current(version: String)
     case available(version: String)
+    case installing(version: String, phase: String)
     case failed(message: String)
 }
 
@@ -148,10 +155,12 @@ public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
     }
 }
 
+/// Only commands backed by an existing truthful capability belong here.
+/// Models intentionally have no mutation command until the native model manager
+/// is implemented and wired to the current runtime's tested switch/download path.
 public enum SuperDictateSettingsCommand: Equatable, Sendable {
     case editShortcuts
     case setRemoveFillerWords(Bool)
-    case openModelManager
     case setRecentTranscriptMode(SuperDictateRecentTranscriptMode)
     /// Explicit transcript-history deletion. The agent must clear both the
     /// bounded recent cache and the durable Library so a later migration cannot
