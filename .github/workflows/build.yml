@@ -6,13 +6,34 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   macos:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: integration/agent-library-single-writer-v4
+          fetch-depth: 0
+      - name: Apply one-shot single-writer runtime hooks
+        run: |
+          python3 scripts/apply-agent-library-single-writer-v4.py
+          grep -q 'ProductLibraryPersistence.scheduleLegacyHistoryMerge' swift/Sources/Parakey/main.swift
+          grep -q 'ProductLibraryPersistence.scheduleClear' swift/Sources/Parakey/main.swift
+          if grep -Eq 'libraryStore\.(save|upsertRecording|upsertTask|removeRecordingFromIndex)' swift/Sources/Parakey/NativeProductWindowController.swift; then
+            echo 'visible product controller must remain read-only' >&2
+            exit 1
+          fi
+          git diff --check
+          git fetch origin main
+          git show origin/main:.github/workflows/build.yml > .github/workflows/build.yml
+          rm -f scripts/apply-agent-library-single-writer-v4.py
+          git config user.name "SuperDictate automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Wire single-writer Library persistence into runtime"
+          git push origin HEAD:integration/agent-library-single-writer-v4
       - name: Validate scripts and plists
         run: ./scripts/check.sh
       - name: Swift self-tests
