@@ -1,0 +1,97 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "meta": {
+    "name": "SuperDictate",
+    "version": "2.0.0",
+    "principles": [
+      "native-first",
+      "content-first",
+      "progressive-disclosure",
+      "local-first",
+      "evidence-without-noise"
+    ],
+    "referenceNote": "Token architecture is informed by modern semantic systems including OpenAI Apps SDK UI. SuperDictate does not use OpenAI trademarks, logo, wordmark, branded font, or brand assets."
+  },
+  "primitive": {
+    "space": { "0": 0, "1": 4, "2": 8, "3": 12, "4": 16, "5": 20, "6": 24, "8": 32, "10": 40, "12": 48 },
+    "radius": { "compact": 6, "surface": 10, "floating": 14 },
+    "size": {
+      "controlCompact": 28,
+      "controlDefault": 32,
+      "controlLarge": 38,
+      "iconCompact": 14,
+      "iconDefault": 16,
+      "iconLarge": 20,
+      "sidebarIdeal": 212,
+      "documentMax": 760
+    },
+    "type": { "display": 28, "title": 20, "heading": 16, "body": 15, "interface": 13, "caption": 12 },
+    "motionMs": { "fast": 120, "standard": 180, "deliberate": 240, "hudEnter": 280 }
+  },
+  "semantic": {
+    "color": {
+      "text": {
+        "primary": { "apple": "labelColor", "light": "#0D0D0D", "dark": "#F2F2F2" },
+        "secondary": { "apple": "secondaryLabelColor", "light": "#5F5F5F", "dark": "#A6A6A6" },
+        "tertiary": { "apple": "tertiaryLabelColor", "light": "#8A8A8A", "dark": "#7A7A7A" }
+      },
+      "surface": {
+        "canvas": { "apple": "windowBackgroundColor", "light": "#FFFFFF", "dark": "#1C1C1E" },
+        "secondary": { "apple": "controlBackgroundColor", "light": "#F7F7F7", "dark": "#2A2A2C" },
+        "tertiary": { "apple": "underPageBackgroundColor", "light": "#EFEFEF", "dark": "#333336" }
+      },
+      "border": {
+        "subtle": { "apple": "separatorColor @ 58%", "light": "rgba(0,0,0,0.10)", "dark": "rgba(255,255,255,0.10)" },
+        "default": { "apple": "separatorColor", "light": "rgba(0,0,0,0.16)", "dark": "rgba(255,255,255,0.16)" }
+      },
+      "action": {
+        "primary": { "apple": "controlAccentColor", "web": "platform-accent" },
+        "destructive": { "apple": "systemRed", "light": "#D92D20", "dark": "#FF6961" }
+      },
+      "state": {
+        "recording": { "apple": "systemRed", "light": "#D92D20", "dark": "#FF6961" },
+        "success": { "apple": "systemGreen", "light": "#248A3D", "dark": "#30D158" },
+        "warning": { "apple": "systemOrange", "light": "#C46A00", "dark": "#FF9F0A" }
+      }
+    },
+    "type": {
+      "display": { "font": "system", "size": "{primitive.type.display}", "weight": 600, "lineHeight": 1.15 },
+      "title": { "font": "system", "size": "{primitive.type.title}", "weight": 600, "lineHeight": 1.2 },
+      "heading": { "font": "system", "size": "{primitive.type.heading}", "weight": 600, "lineHeight": 1.3 },
+      "body": { "font": "system", "size": "{primitive.type.body}", "weight": 400, "lineHeight": 1.5 },
+      "interface": { "font": "system", "size": "{primitive.type.interface}", "weight": 400, "lineHeight": 1.35 },
+      "caption": { "font": "system", "size": "{primitive.type.caption}", "weight": 400, "lineHeight": 1.35 }
+    },
+    "space": {
+      "inline": "{primitive.space.2}",
+      "compact": "{primitive.space.3}",
+      "component": "{primitive.space.4}",
+      "comfortable": "{primitive.space.5}",
+      "contentGutter": "{primitive.space.6}",
+      "section": "{primitive.space.8}",
+      "major": "{primitive.space.10}"
+    }
+  },
+  "component": {
+    "button": {
+      "default": { "height": "{primitive.size.controlDefault}", "radius": "native", "paddingInline": "{primitive.space.3}" },
+      "large": { "height": "{primitive.size.controlLarge}", "radius": "native", "paddingInline": "{primitive.space.4}" },
+      "destructive": { "foreground": "{semantic.color.action.destructive}", "treatment": "native-destructive" }
+    },
+    "sidebar": {
+      "idealWidth": "{primitive.size.sidebarIdeal}",
+      "rowTreatment": "native-sidebar-list",
+      "primaryDestinations": ["today", "library", "tasks", "ask"]
+    },
+    "document": {
+      "maxReadableWidth": "{primitive.size.documentMax}",
+      "background": "{semantic.color.surface.canvas}",
+      "sectionGap": "{semantic.space.section}"
+    },
+    "floatingHud": {
+      "radius": "{primitive.radius.floating}",
+      "stateColor": "{semantic.color.state.recording}",
+      "motionEnterMs": "{primitive.motionMs.hudEnter}"
+    }
+  }
+}
