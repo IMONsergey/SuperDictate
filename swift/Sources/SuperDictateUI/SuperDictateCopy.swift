@@ -32,6 +32,7 @@ struct SuperDictateCopy: Sendable {
     }
     var stopRecordingHelp: String { text("Остановить запись", "Stop recording") }
     var startRecordingHelp: String { text("Начать запись", "Start recording") }
+    var startingService: String { text("Подготавливаю службу диктовки…", "Preparing dictation service…") }
     var recordingLocally: String { text("Идёт локальная запись.", "Recording locally.") }
     var transcribingLatest: String { text("Превращаю последнюю запись в текст.", "Turning your latest recording into text.") }
     var attentionSubtitle: String { text("Есть действие, которое требует внимания.", "One item needs your attention.") }
