@@ -1,0 +1,70 @@
+from pathlib import Path
+
+
+def replace_once(text: str, old: str, new: str, label: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"{label}: expected exactly one match, found {count}")
+    return text.replace(old, new, 1)
+
+
+path = Path("swift/Sources/Parakey/main.swift")
+text = path.read_text()
+
+text = replace_once(
+    text,
+    """    private var hotkeyRecorder: HotkeyRecorderController?\n    private var shouldResumeRuntimeAfterWake = false\n""",
+    """    private var hotkeyRecorder: HotkeyRecorderController?\n    private var productCaptureCommandObserver: ProductCaptureCommandObserver?\n    private var shouldResumeRuntimeAfterWake = false\n""",
+    "agent observer property",
+)
+
+text = replace_once(
+    text,
+    """        installWorkspacePowerObservers()\n        installGlobalMouseMonitor()\n        installHotkeyCaptureObservers()\n\n        // Configure hotkey listener up front so it picks up the user's\n""",
+    """        installWorkspacePowerObservers()\n        installGlobalMouseMonitor()\n        installHotkeyCaptureObservers()\n        productCaptureCommandObserver = ProductCaptureCommandObserver(\n            onStart: { [weak self] in self?.handlePress() },\n            onStop: { [weak self] in self?.handleRelease() }\n        )\n\n        // Configure hotkey listener up front so it picks up the user's\n""",
+    "agent observer installation",
+)
+
+text = replace_once(
+    text,
+    """        removeWorkspacePowerObservers()\n        removeGlobalMouseMonitor()\n        removeHotkeyCaptureObservers()\n        correctionSyncTimer?.invalidate()\n""",
+    """        removeWorkspacePowerObservers()\n        removeGlobalMouseMonitor()\n        removeHotkeyCaptureObservers()\n        productCaptureCommandObserver = nil\n        correctionSyncTimer?.invalidate()\n""",
+    "agent observer teardown",
+)
+
+text = replace_once(
+    text,
+    """    private var settingsDraft: ControlPanelSettingsDraft?\n    private var hotkeyRecorder: HotkeyRecorderController?\n\n    private var language: InterfaceLanguage { settings.interfaceLanguage }\n""",
+    """    private var settingsDraft: ControlPanelSettingsDraft?\n    private var hotkeyRecorder: HotkeyRecorderController?\n    private var productWindowController: NativeProductWindowController?\n\n    private var language: InterfaceLanguage { settings.interfaceLanguage }\n    private var productLanguage: SuperDictateInterfaceLanguage {\n        language == .russian ? .russian : .english\n    }\n""",
+    "control-panel product property",
+)
+
+text = replace_once(
+    text,
+    """        updateTask?.cancel()\n        updateTask = nil\n        SuperDictateControlPanelRegistry.clearCurrentPanel()\n""",
+    """        updateTask?.cancel()\n        updateTask = nil\n        productWindowController = nil\n        SuperDictateControlPanelRegistry.clearCurrentPanel()\n""",
+    "control-panel product teardown",
+)
+
+text = replace_once(
+    text,
+    """        if closingWindow === window {\n            settingsWindow?.orderOut(nil)\n            settingsWindow = nil\n            NSApp.terminate(nil)\n        }\n""",
+    """        if closingWindow === window {\n            window = nil\n        }\n""",
+    "system-status close behavior",
+)
+
+old_show = """    private func showWindow() {\n        if let window {\n            refresh(force: true)\n            window.makeKeyAndOrderFront(nil)\n            NSApp.activate(ignoringOtherApps: true)\n            return\n        }\n\n        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 310),\n                              styleMask: [.titled, .closable, .miniaturizable],\n                              backing: .buffered,\n                              defer: false)\n        window.title = \"SuperDictate\"\n        window.contentMinSize = NSSize(width: 520, height: 310)\n        window.contentMaxSize = NSSize(width: 520, height: 310)\n        window.isReleasedWhenClosed = false\n        window.delegate = self\n        self.window = window\n        refresh(force: true)\n        window.center()\n        window.makeKeyAndOrderFront(nil)\n        NSApp.activate(ignoringOtherApps: true)\n    }\n"""
+new_show = """    private func showWindow() {\n        let snapshot = makeSuperDictateProductSnapshot(\n            settings: settings,\n            agentState: AgentRuntimeStateStore.read(),\n            agentRunning: SuperDictateAgentService.isAgentRunning(),\n            language: language\n        )\n        if let productWindowController {\n            productWindowController.refresh(snapshot: snapshot, language: productLanguage)\n            productWindowController.show()\n            return\n        }\n\n        let controller = NativeProductWindowController(\n            initialSnapshot: snapshot,\n            language: productLanguage,\n            onOpenSettings: { [weak self] in\n                self?.openSettingsClicked(NSButton())\n            },\n            onOpenSystemStatus: { [weak self] in\n                self?.showSystemStatusWindow()\n            },\n            onClose: { [weak self] in\n                self?.productWindowController = nil\n                self?.settingsWindow?.orderOut(nil)\n                self?.settingsWindow = nil\n                self?.window?.orderOut(nil)\n                self?.window = nil\n                NSApp.terminate(nil)\n            }\n        )\n        productWindowController = controller\n        controller.show()\n        refresh(force: true)\n    }\n\n    private func showSystemStatusWindow() {\n        if let window {\n            refresh(force: true)\n            window.makeKeyAndOrderFront(nil)\n            NSApp.activate(ignoringOtherApps: true)\n            return\n        }\n\n        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 310),\n                              styleMask: [.titled, .closable, .miniaturizable],\n                              backing: .buffered,\n                              defer: false)\n        window.title = t(\"SuperDictate — состояние системы\", \"SuperDictate — System Status\")\n        window.contentMinSize = NSSize(width: 520, height: 310)\n        window.contentMaxSize = NSSize(width: 520, height: 310)\n        window.isReleasedWhenClosed = false\n        window.delegate = self\n        self.window = window\n        refresh(force: true)\n        window.center()\n        window.makeKeyAndOrderFront(nil)\n        NSApp.activate(ignoringOtherApps: true)\n    }\n"""
+text = replace_once(text, old_show, new_show, "main/product window split")
+
+old_refresh = """    private func refresh(force: Bool = false) {\n        guard let window else { return }\n        let fingerprint = renderFingerprint()\n        guard force || fingerprint != lastRenderFingerprint else { return }\n        lastRenderFingerprint = fingerprint\n        resizeCompactPanel(window)\n        window.title = t(\"SuperDictate — панель управления\", \"SuperDictate — Control Panel\")\n        window.contentView = makeContentView()\n        if let settingsWindow, settingsWindow.isVisible {\n            settingsWindow.title = t(\"Настройки SuperDictate\", \"SuperDictate Settings\")\n            settingsWindow.contentView = makeSettingsContentView()\n        }\n    }\n"""
+new_refresh = """    private func refresh(force: Bool = false) {\n        let agentState = AgentRuntimeStateStore.read()\n        let agentRunning = SuperDictateAgentService.isAgentRunning()\n        productWindowController?.refresh(\n            snapshot: makeSuperDictateProductSnapshot(\n                settings: settings,\n                agentState: agentState,\n                agentRunning: agentRunning,\n                language: language\n            ),\n            language: productLanguage\n        )\n\n        let fingerprint = renderFingerprint()\n        guard force || fingerprint != lastRenderFingerprint else { return }\n        lastRenderFingerprint = fingerprint\n        if let window {\n            resizeCompactPanel(window)\n            window.title = t(\"SuperDictate — состояние системы\", \"SuperDictate — System Status\")\n            window.contentView = makeContentView()\n        }\n        if let settingsWindow, settingsWindow.isVisible {\n            settingsWindow.title = t(\"Настройки SuperDictate\", \"SuperDictate Settings\")\n            settingsWindow.contentView = makeSettingsContentView()\n        }\n    }\n"""
+text = replace_once(text, old_refresh, new_refresh, "live product refresh")
+path.write_text(text)
+
+view_path = Path("swift/Sources/SuperDictateUI/SuperDictateMainView.swift")
+view = view_path.read_text()
+old_toolbar = """            ToolbarItemGroup(placement: .primaryAction) {\n                if snapshot.status == .needsAttention {\n                    Image(systemName: \"exclamationmark.triangle.fill\")\n                        .foregroundStyle(SuperDictateDesign.ColorRole.warning)\n                        .help(snapshot.issueMessage ?? copy.needsAttention)\n                }\n\n                Button {\n                    onCommand(snapshot.primaryCaptureCommand)\n                } label: {\n                    Label(\n                        snapshot.isCaptureActive ? copy.stop : copy.record,\n                        systemImage: snapshot.isCaptureActive ? \"stop.fill\" : \"waveform\"\n                    )\n                }\n                .keyboardShortcut(\"r\", modifiers: [.command, .shift])\n                .help(snapshot.isCaptureActive ? copy.stopRecordingHelp : copy.startRecordingHelp)\n                .disabled(!snapshot.isPrimaryCaptureCommandEnabled)\n            }\n"""
+new_toolbar = """            ToolbarItemGroup(placement: .primaryAction) {\n                if snapshot.status == .needsAttention {\n                    Button {\n                        onCommand(.openSystemStatus)\n                    } label: {\n                        Image(systemName: \"exclamationmark.triangle.fill\")\n                            .foregroundStyle(SuperDictateDesign.ColorRole.warning)\n                    }\n                    .buttonStyle(.plain)\n                    .help(snapshot.issueMessage ?? copy.openSystemStatus)\n                }\n\n                Menu {\n                    Button(copy.systemStatus) {\n                        onCommand(.openSystemStatus)\n                    }\n                } label: {\n                    Image(systemName: \"ellipsis.circle\")\n                }\n                .help(copy.more)\n\n                Button {\n                    onCommand(snapshot.primaryCaptureCommand)\n                } label: {\n                    Label(\n                        snapshot.isCaptureActive ? copy.stop : copy.record,\n                        systemImage: snapshot.isCaptureActive ? \"stop.fill\" : \"waveform\"\n                    )\n                }\n                .keyboardShortcut(\"r\", modifiers: [.command, .shift])\n                .help(snapshot.isCaptureActive ? copy.stopRecordingHelp : copy.startRecordingHelp)\n                .disabled(!snapshot.isPrimaryCaptureCommandEnabled)\n            }\n"""
+view = replace_once(view, old_toolbar, new_toolbar, "native toolbar system status")
+view_path.write_text(view)
