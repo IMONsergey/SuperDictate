@@ -1,12 +1,20 @@
 name: build
 
+# Production changes are required to land through pull requests. Run the heavy
+# macOS release gate once on the PR head; a squash merge must not immediately
+# consume another hosted macOS runner to repeat the identical build.
 on:
-  push:
-    branches: [main]
   pull_request:
 
 permissions:
   contents: read
+
+# Keep only the newest build for each pull request. SuperDictate's gate compiles
+# FluidAudio and exercises a real install/uninstall, so obsolete intermediate
+# heads should never occupy runner capacity after a newer commit exists.
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   macos:
