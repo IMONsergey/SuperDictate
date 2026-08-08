@@ -8,6 +8,14 @@ on:
 permissions:
   contents: read
 
+# Keep only the newest build for a branch / pull request. SuperDictate's macOS
+# gate compiles FluidAudio and exercises a real install/uninstall, so allowing
+# obsolete intermediate heads to occupy hosted runners slows feedback without
+# increasing confidence.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   macos:
     runs-on: macos-15
