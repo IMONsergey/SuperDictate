@@ -13,6 +13,7 @@ public enum SuperDictateDestination: String, CaseIterable, Codable, Sendable, Id
 
 public enum SuperDictateRuntimeStatus: String, Codable, Sendable {
     case idle
+    case starting
     case recording
     case transcribing
     case ready
@@ -135,7 +136,7 @@ public struct SuperDictateProductSnapshot: Codable, Equatable, Sendable {
         switch status {
         case .idle, .ready, .recording:
             return true
-        case .transcribing, .needsAttention:
+        case .starting, .transcribing, .needsAttention:
             return false
         }
     }
