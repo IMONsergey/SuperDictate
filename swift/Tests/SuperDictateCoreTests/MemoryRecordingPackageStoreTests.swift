@@ -65,7 +65,8 @@ extension ProductStateTests {
             manifest.state = .ready
 
             try await store.saveManifest(manifest)
-            let loaded = try XCTUnwrap(await store.loadManifest(recordingID: id))
+            let maybeLoaded = try await store.loadManifest(recordingID: id)
+            let loaded = try XCTUnwrap(maybeLoaded)
             XCTAssertEqual(loaded, manifest)
             XCTAssertEqual(loaded.chunks(for: .microphone), [microphone])
             XCTAssertEqual(loaded.chunks(for: .system), [system])
