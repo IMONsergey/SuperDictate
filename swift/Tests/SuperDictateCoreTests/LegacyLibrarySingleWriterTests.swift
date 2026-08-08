@@ -63,11 +63,11 @@ extension ProductStateTests {
             recordingID: id,
             title: durable.title,
             segments: [
-                SuperDictateMemorySegment(
+                SuperDictateEvidenceSegment(
                     text: "Rich evidence span",
+                    speaker: "Ada",
                     startMilliseconds: 500,
-                    endMilliseconds: 1_500,
-                    speaker: "Ada"
+                    endMilliseconds: 1_500
                 )
             ]
         )
