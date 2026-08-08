@@ -73,7 +73,11 @@ public actor JSONSuperDictateMemoryPackageStore {
         createdAt: Date = Date()
     ) throws -> SuperDictateMemoryRecordingManifest {
         let packageURL = packageURL(recordingID: recordingID)
-        try Self.createPrivateDirectoryExclusively(packageURL)
+        do {
+            try Self.createPrivateDirectoryExclusively(packageURL)
+        } catch SuperDictateMemoryPackageStoreError.posix(let code) where code == EEXIST {
+            throw SuperDictateMemoryPackageStoreError.packageAlreadyExists(recordingID)
+        }
 
         do {
             try Self.createPrivateDirectoryExclusively(
@@ -232,15 +236,9 @@ public actor JSONSuperDictateMemoryPackageStore {
     }
 
     private static func createPrivateDirectoryExclusively(_ url: URL) throws {
-        if Darwin.mkdir(url.path, mode_t(0o700)) == 0 {
-            return
+        guard Darwin.mkdir(url.path, mode_t(0o700)) == 0 else {
+            throw SuperDictateMemoryPackageStoreError.posix(errno)
         }
-        if errno == EEXIST {
-            throw SuperDictateMemoryPackageStoreError.packageAlreadyExists(
-                UUID(uuidString: url.lastPathComponent) ?? UUID()
-            )
-        }
-        throw SuperDictateMemoryPackageStoreError.posix(errno)
     }
 
     private static func validatePrivateDirectory(_ url: URL) throws {
@@ -248,8 +246,10 @@ public actor JSONSuperDictateMemoryPackageStore {
         guard Darwin.lstat(url.path, &st) == 0 else {
             throw SuperDictateMemoryPackageStoreError.posix(errno)
         }
-        guard (st.st_mode & S_IFMT) == S_IFDIR,
-              st.st_nlink >= 2 else {
+        // lstat + S_IFDIR is the important boundary here: a symlink to a real
+        // directory must not be accepted as a package. Do not depend on directory
+        // link counts, which are filesystem implementation details.
+        guard (st.st_mode & S_IFMT) == S_IFDIR else {
             throw SuperDictateMemoryPackageStoreError.unsafeFileType
         }
     }
