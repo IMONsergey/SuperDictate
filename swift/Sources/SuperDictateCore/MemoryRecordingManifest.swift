@@ -243,19 +243,25 @@ public struct SuperDictateMemoryRecordingManifest: Codable, Equatable, Sendable 
         issue = nil
     }
 
+    /// Operational attention cannot silently reopen a ready package. The Core
+    /// recovery layer has a separate internal integrity transition below for
+    /// physical checksum/missing-source failures discovered after finalization.
     public mutating func markNeedsAttention(_ message: String) throws {
-        let normalized = Self.normalizedIssue(message)
-        guard let normalized else {
-            throw SuperDictateMemoryManifestError.invalidIssueState
-        }
         guard state != .ready else {
             throw SuperDictateMemoryManifestError.invalidStateTransition(
                 from: state,
                 to: .needsAttention
             )
         }
-        state = .needsAttention
-        issue = normalized
+        try setNeedsAttention(message)
+    }
+
+    /// Core-only integrity transition. A package that was legitimately ready can
+    /// later become unhealthy because source bytes are missing or corrupted. This
+    /// method is intentionally internal so UI/adapters cannot use it to reopen a
+    /// ready recording for ordinary writes.
+    mutating func markIntegrityNeedsAttention(_ message: String) throws {
+        try setNeedsAttention(message)
     }
 
     public func chunks(for source: SuperDictateMemoryAudioSource) -> [SuperDictateMemoryAudioChunk] {
@@ -295,6 +301,15 @@ public struct SuperDictateMemoryRecordingManifest: Codable, Equatable, Sendable 
             }
             sequences[chunk.source] = sourceSequences
         }
+    }
+
+    private mutating func setNeedsAttention(_ message: String) throws {
+        let normalized = Self.normalizedIssue(message)
+        guard let normalized else {
+            throw SuperDictateMemoryManifestError.invalidIssueState
+        }
+        state = .needsAttention
+        issue = normalized
     }
 
     private static func normalizedIssue(_ value: String?) -> String? {
