@@ -132,7 +132,9 @@ private actor ProductLibraryPersistenceWorker {
                 try await store.save(result.archive)
                 log(
                     "product Library merged runtime history "
-                    + "(recordings=\(result.addedRecordingCount), documents=\(result.addedDocumentCount))"
+                    + "(recordings=\(result.addedRecordingCount), "
+                    + "documents=\(result.addedDocumentCount), "
+                    + "metadata_repairs=\(result.repairedRecordingMetadataCount))"
                 )
 
             case .clear:
