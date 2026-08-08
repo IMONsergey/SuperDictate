@@ -15,7 +15,11 @@ extension ProductStateTests {
             id: id,
             source: source,
             sequence: sequence,
-            relativePath: path ?? "\(source.rawValue)/\(sequence).caf",
+            relativePath: path ?? SuperDictateMemoryAudioChunk.canonicalRelativePath(
+                source: source,
+                sequence: sequence,
+                chunkID: id
+            ),
             sessionStartMilliseconds: start,
             sessionEndMilliseconds: end,
             sampleRate: 48_000,
@@ -78,17 +82,45 @@ extension ProductStateTests {
             )
         }
 
+        let id = UUID()
         XCTAssertThrowsError(
             try SuperDictateMemoryAudioChunk(
+                id: id,
                 source: .system,
                 sequence: 0,
-                relativePath: "system/0.caf",
+                relativePath: SuperDictateMemoryAudioChunk.canonicalRelativePath(
+                    source: .system,
+                    sequence: 0,
+                    chunkID: id
+                ),
                 sessionStartMilliseconds: 0,
                 sessionEndMilliseconds: 1,
                 sampleRate: 48_000,
                 channelCount: 2,
                 byteLength: 100,
                 sha256: "not-a-sha"
+            )
+        )
+    }
+
+    func testMemoryManifestRejectsPathThatDoesNotMatchChunkIdentity() {
+        let id = UUID()
+        XCTAssertThrowsError(
+            try SuperDictateMemoryAudioChunk(
+                id: id,
+                source: .system,
+                sequence: 3,
+                relativePath: SuperDictateMemoryAudioChunk.canonicalRelativePath(
+                    source: .system,
+                    sequence: 2,
+                    chunkID: id
+                ),
+                sessionStartMilliseconds: 0,
+                sessionEndMilliseconds: 1,
+                sampleRate: 48_000,
+                channelCount: 2,
+                byteLength: 100,
+                sha256: String(repeating: "a", count: 64)
             )
         )
     }
@@ -151,7 +183,7 @@ extension ProductStateTests {
         XCTAssertEqual(manifest.chunks, [original])
     }
 
-    func testMemoryManifestLifecycleIsExplicitAndReadyIsTerminal() throws {
+    func testMemoryManifestLifecycleIsExplicitAndReadyIsTerminalForOrdinaryWrites() throws {
         var manifest = try SuperDictateMemoryRecordingManifest(
             recordingID: UUID(),
             createdAt: Date()
@@ -169,6 +201,12 @@ extension ProductStateTests {
                 .invalidStateTransition(from: .ready, to: .finalizing)
             )
         }
+        XCTAssertThrowsError(try manifest.markNeedsAttention("ordinary warning")) { error in
+            XCTAssertEqual(
+                error as? SuperDictateMemoryManifestError,
+                .invalidStateTransition(from: .ready, to: .needsAttention)
+            )
+        }
         XCTAssertThrowsError(try manifest.appendFinalizedChunk(
             try memoryChunk(source: .microphone, sequence: 0)
         )) { error in
@@ -177,6 +215,18 @@ extension ProductStateTests {
                 .chunkAppendNotAllowed(.ready)
             )
         }
+    }
+
+    func testCoreIntegrityRecoveryCanDowngradeReadyPackage() throws {
+        var manifest = try SuperDictateMemoryRecordingManifest(
+            recordingID: UUID(),
+            createdAt: Date()
+        )
+        try manifest.beginFinalization()
+        try manifest.markReady()
+        try manifest.markIntegrityNeedsAttention("checksum mismatch")
+        XCTAssertEqual(manifest.state, .needsAttention)
+        XCTAssertEqual(manifest.issue, "checksum mismatch")
     }
 
     func testNeedsAttentionRequiresReasonAndCanResumeFinalization() throws {
