@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import SuperDictateCore
 
-final class LegacyLibraryMergeTests: XCTestCase {
+extension ProductStateTests {
     func testMergeAddsMissingLegacyRecordingAndEvidence() {
         let entries = [
             SuperDictateLegacyHistoryEntry(
