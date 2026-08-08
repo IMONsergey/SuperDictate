@@ -28,9 +28,19 @@ extension ProductStateTests {
         )
     }
 
-    func testDualTrackSequencesAreIndependentAndCanonical() throws {
-        let microphone = try sourceV2Chunk(source: .microphone, sequence: 0)
-        let system = try sourceV2Chunk(source: .system, sequence: 0)
+    func testDualTrackSequencesAreIndependentCanonicalAndDescribeDuration() throws {
+        let microphone = try sourceV2Chunk(
+            source: .microphone,
+            sequence: 0,
+            start: 100,
+            end: 1_100
+        )
+        let system = try sourceV2Chunk(
+            source: .system,
+            sequence: 0,
+            start: 250,
+            end: 1_500
+        )
         let manifest = try SuperDictateMemoryRecordingManifest(
             recordingID: UUID(),
             createdAt: Date(),
@@ -40,6 +50,8 @@ extension ProductStateTests {
         XCTAssertEqual(manifest.chunks(for: .system), [system])
         XCTAssertTrue(microphone.relativePath.hasPrefix("audio/microphone/000000__"))
         XCTAssertTrue(system.relativePath.hasPrefix("audio/system/000000__"))
+        XCTAssertEqual(manifest.durationMilliseconds, 1_500)
+        XCTAssertEqual(manifest.sources, Set([.microphone, .system]))
     }
 
     func testSameSourceDuplicateSequenceIsRejected() throws {
@@ -104,17 +116,34 @@ extension ProductStateTests {
         }
     }
 
-    func testReadyLifecycleIsTerminalForOrdinaryWrites() throws {
-        var manifest = try SuperDictateMemoryRecordingManifest(
+    func testReadyRequiresAtLeastOneFinalizedSourceChunk() throws {
+        var empty = try SuperDictateMemoryRecordingManifest(
             recordingID: UUID(),
             createdAt: Date()
+        )
+        try empty.beginFinalization()
+        XCTAssertThrowsError(try empty.markReady()) { error in
+            XCTAssertEqual(
+                error as? SuperDictateMemoryManifestError,
+                .readyWithoutSourceAudio
+            )
+        }
+        XCTAssertEqual(empty.state, .finalizing)
+    }
+
+    func testReadyLifecycleIsTerminalForOrdinaryWrites() throws {
+        let source = try sourceV2Chunk(source: .microphone, sequence: 0)
+        var manifest = try SuperDictateMemoryRecordingManifest(
+            recordingID: UUID(),
+            createdAt: Date(),
+            chunks: [source]
         )
         try manifest.beginFinalization()
         try manifest.markReady()
         XCTAssertEqual(manifest.state, .ready)
         XCTAssertThrowsError(
             try manifest.appendFinalizedChunk(
-                try sourceV2Chunk(source: .microphone, sequence: 0)
+                try sourceV2Chunk(source: .microphone, sequence: 1)
             )
         ) { error in
             XCTAssertEqual(
@@ -131,9 +160,11 @@ extension ProductStateTests {
     }
 
     func testIntegrityLayerCanDowngradeReadySource() throws {
+        let source = try sourceV2Chunk(source: .microphone, sequence: 0)
         var manifest = try SuperDictateMemoryRecordingManifest(
             recordingID: UUID(),
-            createdAt: Date()
+            createdAt: Date(),
+            chunks: [source]
         )
         try manifest.beginFinalization()
         try manifest.markReady()
