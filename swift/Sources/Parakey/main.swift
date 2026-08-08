@@ -5635,20 +5635,17 @@ private func processedDictationText(rawTranscript: String,
                                     corrections: [TranscriptCorrection],
                                     removeFillerWords: Bool,
                                     language: DictationLanguage = .auto) -> DictationTextProcessingResult {
-    let trimmed = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-    let repaired = SpeechModelTextRepair.apply(to: trimmed, language: language)
-    let corrected = TranscriptCorrector.apply(to: repaired, corrections: corrections)
-
-    guard removeFillerWords else {
-        return DictationTextProcessingResult(text: corrected.text,
-                                             appliedCorrectionCount: corrected.appliedCount,
-                                             removedFillerWordCount: 0)
-    }
-
-    let stripped = FillerWordRemover.apply(to: corrected.text)
-    return DictationTextProcessingResult(text: stripped.text,
-                                         appliedCorrectionCount: corrected.appliedCount,
-                                         removedFillerWordCount: stripped.removedCount)
+    let processed = processDictationTextWithProductCore(
+        rawTranscript: rawTranscript,
+        corrections: corrections,
+        removeFillerWords: removeFillerWords,
+        language: language
+    )
+    return DictationTextProcessingResult(
+        text: processed.text,
+        appliedCorrectionCount: processed.appliedCorrectionCount,
+        removedFillerWordCount: processed.removedFillerWordCount
+    )
 }
 
 // MARK: - Text insertion
