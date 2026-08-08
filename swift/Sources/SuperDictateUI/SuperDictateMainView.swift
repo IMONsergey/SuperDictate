@@ -54,9 +54,21 @@ public struct SuperDictateMainView: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            List(SuperDictateDestination.allCases, selection: $destination) { item in
-                Label(item.title, systemImage: item.symbolName)
-                    .tag(item)
+            List {
+                ForEach(SuperDictateDestination.allCases) { item in
+                    Button {
+                        destination = item
+                        selectedRecordingID = nil
+                    } label: {
+                        Label(item.title, systemImage: item.symbolName)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(destination == item && selectedRecordingID == nil
+                                     ? SuperDictateDesign.ColorRole.actionPrimary
+                                     : SuperDictateDesign.ColorRole.textPrimary)
+                }
             }
             .listStyle(.sidebar)
 
@@ -280,10 +292,9 @@ private struct RecordingDetailView: View {
 
                 switch section {
                 case .summary:
-                    Text(recording.summary?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                         ? recording.summary!
-                         : "No summary yet.")
+                    Text(summaryText)
                         .font(SuperDictateDesign.TypeStyle.body)
+                        .lineSpacing(5)
                         .textSelection(.enabled)
                 case .transcript:
                     TranscriptDocument(text: recording.transcript)
@@ -313,6 +324,14 @@ private struct RecordingDetailView: View {
             }
         }
     }
+
+    private var summaryText: String {
+        guard let summary = recording.summary?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !summary.isEmpty else {
+            return "No summary yet."
+        }
+        return summary
+    }
 }
 
 private struct TranscriptDocument: View {
@@ -333,7 +352,7 @@ private struct TranscriptDocument: View {
 
 private struct DocumentSection<Content: View>: View {
     let title: String
-    @ViewBuilder let content: Content
+    let content: Content
 
     init(title: String, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -495,7 +514,7 @@ private extension SuperDictateDestination {
     var symbolName: String {
         switch self {
         case .today: return "sun.max"
-        case .library: return "text.page"
+        case .library: return "doc.text"
         case .tasks: return "checkmark.circle"
         case .ask: return "text.bubble"
         }
