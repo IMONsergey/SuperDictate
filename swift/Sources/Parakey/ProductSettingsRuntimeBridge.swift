@@ -69,10 +69,24 @@ func makeSuperDictateSettingsSnapshot(
     )
 }
 
-private func productRecentTranscriptMode(
+/// Shared runtime/Core recent-list mapping. These functions are intentionally
+/// internal rather than file-private because both the visible snapshot builder
+/// and the background-agent mutation handler must use the same exhaustive map.
+func productRecentTranscriptMode(
     _ runtimeMode: RecentTranscriptLimit
 ) -> SuperDictateRecentTranscriptMode {
     switch runtimeMode {
+    case .off: return .off
+    case .last1: return .last1
+    case .last5: return .last5
+    case .last10: return .last10
+    }
+}
+
+func runtimeRecentTranscriptLimit(
+    _ productMode: SuperDictateRecentTranscriptMode
+) -> RecentTranscriptLimit {
+    switch productMode {
     case .off: return .off
     case .last1: return .last1
     case .last5: return .last5
