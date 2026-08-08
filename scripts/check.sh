@@ -8,6 +8,8 @@ cd "$ROOT_DIR"
 bash -n install.sh uninstall.sh scripts/build-app.sh scripts/check.sh
 plutil -lint swift/Info.plist entitlements.plist
 python3 -m json.tool design/superdictate.tokens.json >/dev/null
+python3 -m json.tool distribution.json >/dev/null
+python3 scripts/check-distribution.py
 
 app_version="$(plutil -extract CFBundleShortVersionString raw -o - swift/Info.plist)"
 installer_version="$(sed -n 's/^RELEASE_VERSION="\([^"]*\)"$/\1/p' install.sh)"
