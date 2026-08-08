@@ -48,12 +48,33 @@ public enum SuperDictateSettingsUpdateState: Equatable, Sendable {
     case failed(message: String)
 }
 
-/// User-facing projection of the existing runtime settings and service state.
+/// Mirrors the current runtime `RecentTranscriptLimit` exactly.
 ///
-/// This is deliberately not a second persistence model. The legacy/runtime
-/// settings object remains authoritative while Settings v2 is migrated. This
-/// snapshot contains only concepts the native Settings window is allowed to
-/// display; diagnostic implementation details stay behind System Status.
+/// Numeric values control only how many rows appear in the quick recent-history
+/// surface. They are *not* durable retention caps: while history is enabled the
+/// runtime may keep a larger local archive/Library. `.off` is the stronger
+/// privacy state that disables transcript history and clears local transcript
+/// memory through the agent-owned persistence path.
+public enum SuperDictateRecentTranscriptMode: String, Codable, CaseIterable, Sendable, Identifiable {
+    case off
+    case last1 = "1"
+    case last5 = "5"
+    case last10 = "10"
+
+    public var id: String { rawValue }
+
+    public var visibleEntryCount: Int {
+        switch self {
+        case .off: return 0
+        case .last1: return 1
+        case .last5: return 5
+        case .last10: return 10
+        }
+    }
+}
+
+/// User-facing projection of the existing runtime settings and service state.
+/// This is deliberately not a second persistence model.
 public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
     public var primaryShortcut: String
     public var alternateShortcut: String?
@@ -66,8 +87,7 @@ public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
     public var speechModelDetail: String?
     public var speechModelReady: Bool
 
-    public var historyEnabled: Bool
-    public var historyLimitDescription: String
+    public var recentTranscriptMode: SuperDictateRecentTranscriptMode
     public var libraryRecordingCount: Int
 
     public var serviceState: SuperDictateServiceState
@@ -85,8 +105,7 @@ public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
         speechModelName: String,
         speechModelDetail: String? = nil,
         speechModelReady: Bool,
-        historyEnabled: Bool,
-        historyLimitDescription: String,
+        recentTranscriptMode: SuperDictateRecentTranscriptMode,
         libraryRecordingCount: Int,
         serviceState: SuperDictateServiceState,
         permissions: [SuperDictatePermissionStatus],
@@ -102,13 +121,16 @@ public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
         self.speechModelName = speechModelName
         self.speechModelDetail = Self.nonEmpty(speechModelDetail)
         self.speechModelReady = speechModelReady
-        self.historyEnabled = historyEnabled
-        self.historyLimitDescription = historyLimitDescription
+        self.recentTranscriptMode = recentTranscriptMode
         self.libraryRecordingCount = max(0, libraryRecordingCount)
         self.serviceState = serviceState
         self.permissions = permissions
         self.appVersion = appVersion
         self.updateState = updateState
+    }
+
+    public var historyEnabled: Bool {
+        recentTranscriptMode != .off
     }
 
     public var missingPermissions: [SuperDictatePermissionStatus] {
@@ -130,10 +152,11 @@ public enum SuperDictateSettingsCommand: Equatable, Sendable {
     case editShortcuts
     case setRemoveFillerWords(Bool)
     case openModelManager
-    case setHistoryEnabled(Bool)
-    /// Explicit durable Library deletion. This is intentionally distinct from
-    /// removing rows from the bounded recent-history cache.
-    case clearLibraryHistory
+    case setRecentTranscriptMode(SuperDictateRecentTranscriptMode)
+    /// Explicit transcript-history deletion. The agent must clear both the
+    /// bounded recent cache and the durable Library so a later migration cannot
+    /// immediately recreate data the user explicitly removed.
+    case clearTranscriptHistory
     case openPermission(SuperDictatePermissionKind)
     case startService
     case restartService
