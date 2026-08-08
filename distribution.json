@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "product": {
+    "repository": "IMONsergey/SuperDictate",
+    "bundleIdentifier": "com.local.superdictate",
+    "appName": "SuperDictate"
+  },
+  "releaseChannel": {
+    "repository": "shlgd/SuperDictate",
+    "manifestRepository": "shlgd/SuperDictate",
+    "mode": "legacy-upstream",
+    "migrationRequired": true
+  }
+}
