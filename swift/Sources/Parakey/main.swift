@@ -12007,6 +12007,14 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard next != history else { return }
         history = next
         settings.recentTranscriptEntries = history
+        ProductLibraryPersistence.scheduleLegacyHistoryMerge(
+            history.map {
+                ProductLegacyHistoryValue(
+                    text: $0.text,
+                    transcriptionDurationSeconds: $0.transcriptionDurationSeconds
+                )
+            }
+        )
         if rebuildMenuAfterPersisting {
             rebuildMenu()
         }
