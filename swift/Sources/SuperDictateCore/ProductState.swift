@@ -7,7 +7,6 @@ public enum SuperDictateDestination: String, CaseIterable, Codable, Sendable, Id
     case library
     case tasks
     case ask
-
     public var id: String { rawValue }
 }
 
@@ -24,8 +23,14 @@ public enum SuperDictateRecordingSection: String, CaseIterable, Codable, Sendabl
     case summary
     case transcript
     case tasks
-
     public var id: String { rawValue }
+}
+
+/// Product-level origin/lifecycle of a Library recording.
+public enum SuperDictateCaptureKind: String, Codable, CaseIterable, Sendable {
+    case instantDictation = "instant_dictation"
+    case memoryRecording = "memory_recording"
+    case imported
 }
 
 public struct SuperDictateRecording: Identifiable, Codable, Equatable, Sendable {
@@ -33,6 +38,9 @@ public struct SuperDictateRecording: Identifiable, Codable, Equatable, Sendable 
     public var title: String
     public var transcript: String
     public var summary: String?
+    /// Optional for backward compatibility with Library archives written before
+    /// capture kinds existed. A nil legacy value behaves as instant dictation.
+    public var captureKind: SuperDictateCaptureKind?
     /// `nil` means the backing runtime does not know the capture timestamp.
     /// The UI must not substitute the current date and present it as source truth.
     public var createdAt: Date?
@@ -45,6 +53,7 @@ public struct SuperDictateRecording: Identifiable, Codable, Equatable, Sendable 
         title: String,
         transcript: String,
         summary: String? = nil,
+        captureKind: SuperDictateCaptureKind? = .instantDictation,
         createdAt: Date? = nil,
         durationSeconds: TimeInterval? = nil,
         people: [String] = [],
@@ -54,10 +63,15 @@ public struct SuperDictateRecording: Identifiable, Codable, Equatable, Sendable 
         self.title = title
         self.transcript = transcript
         self.summary = summary
+        self.captureKind = captureKind
         self.createdAt = createdAt
         self.durationSeconds = durationSeconds
         self.people = people
         self.requiresAttention = requiresAttention
+    }
+
+    public var effectiveCaptureKind: SuperDictateCaptureKind {
+        captureKind ?? .instantDictation
     }
 }
 
@@ -87,10 +101,8 @@ public struct SuperDictateTask: Identifiable, Codable, Equatable, Sendable {
 }
 
 /// Platform-neutral state consumed by the macOS shell.
-///
 /// It deliberately contains product concepts, not ASR engines, checksums,
-/// manifests, TCC details, model download state or updater internals. Those
-/// concerns remain behind adapters and Settings/diagnostics surfaces.
+/// manifests, TCC details, model download state or updater internals.
 public struct SuperDictateProductSnapshot: Codable, Equatable, Sendable {
     public var status: SuperDictateRuntimeStatus
     public var recordings: [SuperDictateRecording]
@@ -124,14 +136,8 @@ public struct SuperDictateProductSnapshot: Codable, Equatable, Sendable {
         recordings.filter(\.requiresAttention)
     }
 
-    public var isCaptureActive: Bool {
-        status == .recording
-    }
+    public var isCaptureActive: Bool { status == .recording }
 
-    /// The visible Record/Stop control is actionable only when the runtime can
-    /// honor it truthfully. Starting while transcription is already in flight or
-    /// while permissions/service recovery is required would produce a dead/fake
-    /// control, so those states disable the command.
     public var isPrimaryCaptureCommandEnabled: Bool {
         switch status {
         case .idle, .ready, .recording:
@@ -157,7 +163,6 @@ public struct SuperDictateProductSnapshot: Codable, Equatable, Sendable {
                 case (nil, _?):
                     return false
                 case (nil, nil):
-                    // Preserve the runtime's source order when it has no dates.
                     return lhs.offset < rhs.offset
                 }
             }
