@@ -94,10 +94,10 @@ final class ProductCaptureCommandObserver: NSObject {
               pid != getpid(),
               let sender = NSRunningApplication(processIdentifier: pid),
               sender.bundleIdentifier == Bundle.main.bundleIdentifier,
-              let senderBundleURL = sender.bundleURL?.standardizedFileURL,
-              let ownBundleURL = Bundle.main.bundleURL.standardizedFileURL as URL? else {
+              let senderBundleURL = sender.bundleURL?.standardizedFileURL else {
             return false
         }
+        let ownBundleURL = Bundle.main.bundleURL.standardizedFileURL
         return senderBundleURL == ownBundleURL
     }
 }
