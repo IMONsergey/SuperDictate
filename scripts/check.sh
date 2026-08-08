@@ -39,5 +39,16 @@ grep -q 'is_apple_silicon' install.sh
 grep -q 'Restarting the build natively for Apple Silicon' scripts/build-app.sh
 grep -q 'validate_output_app_path "$OUTPUT_APP"' scripts/build-app.sh
 
+# Shared product packages are part of the macOS executable dependency graph.
+# Build them directly so package-boundary failures are visible before the much
+# heavier FluidAudio app build. XCTest is authoritative in CI; some local Intel
+# Swift toolchains in the project history have shipped without a usable XCTest
+# module, so local checks keep the fast build-only path.
+swift build --package-path packages/apple-core
+swift build --package-path packages/apple-ui
+if [[ "${CI:-}" == "true" ]]; then
+    swift test --package-path packages/apple-core
+fi
+
 git diff --check
 printf 'SuperDictate checks passed (v%s).\n' "$app_version"
