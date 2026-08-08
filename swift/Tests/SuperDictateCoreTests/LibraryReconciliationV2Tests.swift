@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import SuperDictateCore
 
-final class LibraryReconciliationV2Tests: XCTestCase {
+extension ProductStateTests {
     func testBoundedLiveHistoryCannotDeleteDurableRecordings() {
         let oldDurable = SuperDictateRecording(
             title: "Older durable recording",
