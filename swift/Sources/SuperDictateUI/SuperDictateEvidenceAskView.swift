@@ -90,7 +90,7 @@ public struct SuperDictateEvidenceAskView: View {
                         .font(SuperDictateDesign.TypeStyle.heading)
                     Spacer()
                     Text("\(hits.count)")
-                        .font(SuperDictateDesign.TypeStyle.captionMedium)
+                        .font(SuperDictateDesign.TypeStyle.caption.weight(.medium))
                         .foregroundStyle(SuperDictateDesign.ColorRole.textTertiary)
                 }
                 .padding(.bottom, SuperDictateDesign.Spacing.inline)
