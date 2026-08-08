@@ -13,12 +13,29 @@ final class ProductStateTests: XCTestCase {
     func testCaptureIsCommandNotDestination() {
         let idle = SuperDictateProductSnapshot(status: .idle)
         XCTAssertEqual(idle.primaryCaptureCommand, .startRecording)
+        XCTAssertTrue(idle.isPrimaryCaptureCommandEnabled)
 
         let recording = SuperDictateProductSnapshot(
             status: .recording,
             activeRecordingStartedAt: Date()
         )
         XCTAssertEqual(recording.primaryCaptureCommand, .stopRecording)
+        XCTAssertTrue(recording.isPrimaryCaptureCommandEnabled)
+    }
+
+    func testCaptureCommandDisablesWhileRuntimeCannotHonorStart() {
+        XCTAssertFalse(
+            SuperDictateProductSnapshot(status: .transcribing)
+                .isPrimaryCaptureCommandEnabled
+        )
+        XCTAssertFalse(
+            SuperDictateProductSnapshot(status: .needsAttention)
+                .isPrimaryCaptureCommandEnabled
+        )
+        XCTAssertTrue(
+            SuperDictateProductSnapshot(status: .ready)
+                .isPrimaryCaptureCommandEnabled
+        )
     }
 
     func testSnapshotOrdersDatedRecordingsNewestFirst() {
