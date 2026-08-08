@@ -78,7 +78,7 @@ public struct SuperDictateSearchableLibraryView: View {
 
     private var searchableDocuments: [SuperDictateMemoryDocument] {
         if memoryDocuments.isEmpty {
-            return recordings.map(SuperDictateMemoryDocument.init(recording:))
+            return recordings.map { SuperDictateMemoryDocument(recording: $0) }
         }
         return memoryDocuments
     }
