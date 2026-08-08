@@ -38,10 +38,16 @@ extension ProductStateTests {
         try await withMemoryPackageStore { _, store in
             let id = UUID()
             var manifest = try await store.createPackage(recordingID: id)
+            let microphoneID = UUID()
             let microphone = try SuperDictateMemoryAudioChunk(
+                id: microphoneID,
                 source: .microphone,
                 sequence: 0,
-                relativePath: "audio/microphone/000000.caf",
+                relativePath: SuperDictateMemoryAudioChunk.canonicalRelativePath(
+                    source: .microphone,
+                    sequence: 0,
+                    chunkID: microphoneID
+                ),
                 sessionStartMilliseconds: 0,
                 sessionEndMilliseconds: 2_000,
                 sampleRate: 48_000,
@@ -49,10 +55,16 @@ extension ProductStateTests {
                 byteLength: 10_000,
                 sha256: String(repeating: "a", count: 64)
             )
+            let systemID = UUID()
             let system = try SuperDictateMemoryAudioChunk(
+                id: systemID,
                 source: .system,
                 sequence: 0,
-                relativePath: "audio/system/000000.caf",
+                relativePath: SuperDictateMemoryAudioChunk.canonicalRelativePath(
+                    source: .system,
+                    sequence: 0,
+                    chunkID: systemID
+                ),
                 sessionStartMilliseconds: 120,
                 sessionEndMilliseconds: 2_120,
                 sampleRate: 48_000,
@@ -65,6 +77,8 @@ extension ProductStateTests {
             try manifest.beginFinalization()
             try manifest.markReady()
 
+            // @testable can verify the internal raw save contract, while external
+            // adapters cannot call it. Production mutations use actor methods.
             try await store.saveManifest(manifest)
             let maybeLoaded = try await store.loadManifest(recordingID: id)
             let loaded = try XCTUnwrap(maybeLoaded)
