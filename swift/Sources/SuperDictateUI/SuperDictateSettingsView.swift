@@ -75,15 +75,30 @@ public struct SuperDictateSettingsView: View {
 
     private var dictationSection: some View {
         SettingsGroup {
-            SettingsValueRow(title: text("Основная комбинация", "Primary shortcut"), value: snapshot.primaryShortcut)
+            SettingsValueRow(
+                title: text("Основная комбинация", "Primary shortcut"),
+                value: snapshot.primaryShortcut
+            )
             if let alternate = snapshot.alternateShortcut {
-                SettingsValueRow(title: text("Альтернативное завершение", "Alternate completion"), value: alternate)
+                SettingsValueRow(
+                    title: text("Альтернативное завершение", "Alternate completion"),
+                    value: alternate
+                )
             }
             if let history = snapshot.historyShortcut {
-                SettingsValueRow(title: text("История", "History shortcut"), value: history)
+                SettingsValueRow(
+                    title: text("История", "History shortcut"),
+                    value: history
+                )
             }
-            SettingsValueRow(title: text("Режим запуска", "Trigger mode"), value: snapshot.triggerMode)
-            SettingsValueRow(title: text("После диктовки", "Completion behavior"), value: snapshot.completionBehavior)
+            SettingsValueRow(
+                title: text("Режим запуска", "Trigger mode"),
+                value: snapshot.triggerMode
+            )
+            SettingsValueRow(
+                title: text("После диктовки", "Completion behavior"),
+                value: snapshot.completionBehavior
+            )
             Toggle(
                 text("Убирать слова-паразиты", "Remove filler words"),
                 isOn: Binding(
@@ -97,6 +112,9 @@ public struct SuperDictateSettingsView: View {
         }
     }
 
+    /// Model state is deliberately read-only until the native model manager is
+    /// backed by the existing tested runtime switch/download path. A disabled or
+    /// fake "Manage" button would overstate current capability.
     private var modelsSection: some View {
         SettingsGroup {
             HStack(alignment: .top, spacing: SuperDictateDesign.Spacing.component) {
@@ -111,25 +129,27 @@ public struct SuperDictateSettingsView: View {
                 }
                 Spacer()
                 Label(
-                    snapshot.speechModelReady ? text("Готова", "Ready") : text("Не готова", "Not ready"),
-                    systemImage: snapshot.speechModelReady ? "checkmark.circle.fill" : "arrow.down.circle"
+                    snapshot.speechModelReady
+                        ? text("Готова", "Ready")
+                        : text("Не готова", "Not ready"),
+                    systemImage: snapshot.speechModelReady
+                        ? "checkmark.circle.fill"
+                        : "arrow.down.circle"
                 )
                 .font(SuperDictateDesign.TypeStyle.caption)
-                .foregroundStyle(snapshot.speechModelReady
-                                 ? SuperDictateDesign.ColorRole.success
-                                 : SuperDictateDesign.ColorRole.textSecondary)
+                .foregroundStyle(
+                    snapshot.speechModelReady
+                        ? SuperDictateDesign.ColorRole.success
+                        : SuperDictateDesign.ColorRole.textSecondary
+                )
             }
 
             Text(text(
-                "Модель речи — системная настройка и не должна занимать место в основном интерфейсе.",
-                "Speech model choice is a system setting and stays out of the primary interface."
+                "Модель речи — системная настройка. Управление моделью появится здесь только после подключения нативного менеджера к текущему runtime.",
+                "The speech model is a system setting. Model controls will appear here only after the native manager is connected to the current runtime."
             ))
             .font(SuperDictateDesign.TypeStyle.caption)
             .foregroundStyle(SuperDictateDesign.ColorRole.textSecondary)
-
-            Button(text("Управление моделями…", "Manage models…")) {
-                onCommand(.openModelManager)
-            }
         }
     }
 
@@ -174,7 +194,10 @@ public struct SuperDictateSettingsView: View {
             Button(role: .destructive) {
                 confirmClearHistory = true
             } label: {
-                Label(text("Очистить историю…", "Clear History…"), systemImage: "trash")
+                Label(
+                    text("Очистить историю…", "Clear History…"),
+                    systemImage: "trash"
+                )
             }
             .disabled(!snapshot.historyEnabled && snapshot.libraryRecordingCount == 0)
         }
@@ -182,7 +205,10 @@ public struct SuperDictateSettingsView: View {
 
     private var systemSection: some View {
         SettingsGroup {
-            SettingsValueRow(title: text("Фоновая служба", "Background service"), value: serviceLabel)
+            SettingsValueRow(
+                title: text("Фоновая служба", "Background service"),
+                value: serviceLabel
+            )
 
             ForEach(snapshot.permissions) { permission in
                 HStack {
@@ -192,9 +218,11 @@ public struct SuperDictateSettingsView: View {
                             ? "checkmark.circle.fill"
                             : "exclamationmark.triangle.fill"
                     )
-                    .foregroundStyle(permission.state == .granted
-                                     ? SuperDictateDesign.ColorRole.textPrimary
-                                     : SuperDictateDesign.ColorRole.warning)
+                    .foregroundStyle(
+                        permission.state == .granted
+                            ? SuperDictateDesign.ColorRole.textPrimary
+                            : SuperDictateDesign.ColorRole.warning
+                    )
                     Spacer()
                     if permission.state == .missing {
                         Button(text("Открыть", "Open")) {
@@ -207,13 +235,18 @@ public struct SuperDictateSettingsView: View {
                 }
             }
 
-            SettingsValueRow(title: text("Версия", "Version"), value: snapshot.appVersion)
+            SettingsValueRow(
+                title: text("Версия", "Version"),
+                value: snapshot.appVersion
+            )
             updateRow
 
             HStack {
                 serviceButton
                 Spacer()
-                Button(copy.systemStatus) { onCommand(.openSystemStatus) }
+                Button(copy.systemStatus) {
+                    onCommand(.openSystemStatus)
+                }
             }
         }
     }
@@ -226,22 +259,49 @@ public struct SuperDictateSettingsView: View {
                 ProgressView().controlSize(.small)
                 Text(text("Проверяю обновления…", "Checking for updates…"))
             }
+
         case .current(let version):
             SettingsValueRow(
                 title: text("Обновления", "Updates"),
                 value: text("Актуальная версия \(version)", "Up to date · \(version)")
             )
+
         case .available(let version):
             HStack {
-                Text(text("Доступна версия \(version)", "Version \(version) is available"))
+                Text(text(
+                    "Доступна версия \(version)",
+                    "Version \(version) is available"
+                ))
                 Spacer()
-                Button(text("Установить", "Install")) { onCommand(.installAvailableUpdate) }
+                Button(text("Установить", "Install")) {
+                    onCommand(.installAvailableUpdate)
+                }
             }
+
+        case .installing(let version, let phase):
+            HStack(alignment: .firstTextBaseline) {
+                ProgressView().controlSize(.small)
+                VStack(alignment: .leading, spacing: SuperDictateDesign.Spacing.micro) {
+                    Text(text(
+                        "Установка версии \(version)",
+                        "Installing version \(version)"
+                    ))
+                    if !phase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(phase)
+                            .font(SuperDictateDesign.TypeStyle.caption)
+                            .foregroundStyle(SuperDictateDesign.ColorRole.textSecondary)
+                    }
+                }
+            }
+
         case .failed(let message):
             HStack(alignment: .top) {
-                Text(message).foregroundStyle(SuperDictateDesign.ColorRole.warning)
+                Text(message)
+                    .foregroundStyle(SuperDictateDesign.ColorRole.warning)
                 Spacer()
-                Button(text("Повторить", "Retry")) { onCommand(.checkForUpdates) }
+                Button(text("Повторить", "Retry")) {
+                    onCommand(.checkForUpdates)
+                }
             }
         }
     }
@@ -250,13 +310,20 @@ public struct SuperDictateSettingsView: View {
     private var serviceButton: some View {
         switch snapshot.serviceState {
         case .running:
-            Button(text("Перезапустить службу", "Restart service")) { onCommand(.restartService) }
+            Button(text("Перезапустить службу", "Restart service")) {
+                onCommand(.restartService)
+            }
         case .starting:
-            Button(text("Служба запускается…", "Service is starting…")) {}.disabled(true)
+            Button(text("Служба запускается…", "Service is starting…")) {}
+                .disabled(true)
         case .stopped:
-            Button(text("Запустить службу", "Start service")) { onCommand(.startService) }
+            Button(text("Запустить службу", "Start service")) {
+                onCommand(.startService)
+            }
         case .needsAttention:
-            Button(text("Перезапустить службу", "Restart service")) { onCommand(.restartService) }
+            Button(text("Перезапустить службу", "Restart service")) {
+                onCommand(.restartService)
+            }
         }
     }
 
@@ -312,7 +379,9 @@ public struct SuperDictateSettingsView: View {
 private struct SettingsGroup<Content: View>: View {
     let content: Content
 
-    init(@ViewBuilder content: () -> Content) { self.content = content() }
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: SuperDictateDesign.Spacing.component) {
@@ -328,7 +397,8 @@ private struct SettingsValueRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(title).foregroundStyle(SuperDictateDesign.ColorRole.textPrimary)
+            Text(title)
+                .foregroundStyle(SuperDictateDesign.ColorRole.textPrimary)
             Spacer(minLength: SuperDictateDesign.Spacing.section)
             Text(value)
                 .foregroundStyle(SuperDictateDesign.ColorRole.textSecondary)
