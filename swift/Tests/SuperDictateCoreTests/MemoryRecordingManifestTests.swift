@@ -36,6 +36,8 @@ extension ProductStateTests {
 
         XCTAssertEqual(manifest.chunks(for: .microphone), [microphone])
         XCTAssertEqual(manifest.chunks(for: .system), [system])
+        XCTAssertEqual(microphone.container, .caf)
+        XCTAssertEqual(microphone.codec, .linearPCM)
     }
 
     func testMemoryManifestRejectsDuplicateSequenceWithinOneSource() throws {
@@ -149,22 +151,70 @@ extension ProductStateTests {
         XCTAssertEqual(manifest.chunks, [original])
     }
 
-    func testManifestRoundTripPreservesDualTrackDescriptors() throws {
-        let manifest = try SuperDictateMemoryRecordingManifest(
+    func testMemoryManifestLifecycleIsExplicitAndReadyIsTerminal() throws {
+        var manifest = try SuperDictateMemoryRecordingManifest(
+            recordingID: UUID(),
+            createdAt: Date()
+        )
+        XCTAssertEqual(manifest.state, .recording)
+
+        try manifest.beginFinalization()
+        XCTAssertEqual(manifest.state, .finalizing)
+        try manifest.markReady()
+        XCTAssertEqual(manifest.state, .ready)
+
+        XCTAssertThrowsError(try manifest.beginFinalization()) { error in
+            XCTAssertEqual(
+                error as? SuperDictateMemoryManifestError,
+                .invalidStateTransition(from: .ready, to: .finalizing)
+            )
+        }
+        XCTAssertThrowsError(try manifest.appendFinalizedChunk(
+            try memoryChunk(source: .microphone, sequence: 0)
+        )) { error in
+            XCTAssertEqual(
+                error as? SuperDictateMemoryManifestError,
+                .chunkAppendNotAllowed(.ready)
+            )
+        }
+    }
+
+    func testNeedsAttentionRequiresReasonAndCanResumeFinalization() throws {
+        var manifest = try SuperDictateMemoryRecordingManifest(
+            recordingID: UUID(),
+            createdAt: Date()
+        )
+        XCTAssertThrowsError(try manifest.markNeedsAttention("   ")) { error in
+            XCTAssertEqual(error as? SuperDictateMemoryManifestError, .invalidIssueState)
+        }
+
+        try manifest.markNeedsAttention("Recovered partial chunk")
+        XCTAssertEqual(manifest.state, .needsAttention)
+        XCTAssertEqual(manifest.issue, "Recovered partial chunk")
+
+        try manifest.beginFinalization()
+        XCTAssertEqual(manifest.state, .finalizing)
+        XCTAssertNil(manifest.issue)
+    }
+
+    func testManifestRoundTripPreservesDualTrackDescriptorsAndReadyState() throws {
+        var manifest = try SuperDictateMemoryRecordingManifest(
             recordingID: UUID(),
             createdAt: Date(timeIntervalSince1970: 100),
-            state: .ready,
             chunks: [
                 try memoryChunk(source: .microphone, sequence: 0, start: 0, end: 2_000),
                 try memoryChunk(source: .system, sequence: 0, start: 120, end: 2_120),
             ]
         )
+        try manifest.beginFinalization()
+        try manifest.markReady()
 
         let decoded = try JSONDecoder().decode(
             SuperDictateMemoryRecordingManifest.self,
             from: JSONEncoder().encode(manifest)
         )
         XCTAssertEqual(decoded, manifest)
+        XCTAssertEqual(decoded.state, .ready)
         XCTAssertNoThrow(try decoded.validate())
     }
 }
