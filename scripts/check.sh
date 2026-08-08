@@ -45,5 +45,23 @@ grep -q 'Capture is an action, not a destination' docs/DESIGN_SYSTEM_V2.md
 grep -q 'SuperDictateCore' swift/Package.swift
 grep -q 'SuperDictateUI' swift/Package.swift
 
+# Durable Library single-writer invariant. The visible product process may read
+# and reconcile atomic Library snapshots but must never mutate the index.
+product_window='swift/Sources/Parakey/NativeProductWindowController.swift'
+agent_main='swift/Sources/Parakey/main.swift'
+! grep -Eq 'libraryStore\.(save|upsertRecording|upsertTask|removeRecordingFromIndex)' "$product_window" || {
+    printf 'Single-writer violation: visible product controller writes the Library\n' >&2
+    exit 1
+}
+grep -q 'SuperDictateLibraryReconciler.reconcile' "$product_window"
+[[ "$(grep -c 'ProductLibraryPersistence.scheduleLegacyHistoryMerge' "$agent_main")" -ge 2 ]] || {
+    printf 'Single-writer wiring missing: startup/success Library merge hooks required\n' >&2
+    exit 1
+}
+[[ "$(grep -c 'ProductLibraryPersistence.scheduleClear' "$agent_main")" -ge 2 ]] || {
+    printf 'Single-writer wiring missing: startup/history-off Library clear hooks required\n' >&2
+    exit 1
+}
+
 git diff --check
 printf 'SuperDictate checks passed (v%s).\n' "$app_version"
