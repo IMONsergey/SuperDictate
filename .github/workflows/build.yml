@@ -6,29 +6,13 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   macos:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          ref: refactor/runtime-text-core-v3
-          fetch-depth: 0
-      - name: Apply one-shot runtime text core v3 hook
-        run: |
-          python3 scripts/apply-runtime-text-core-v3.py
-          grep -q 'processDictationTextWithProductCore' swift/Sources/Parakey/main.swift
-          git diff --check
-          git fetch origin main
-          git show origin/main:.github/workflows/build.yml > .github/workflows/build.yml
-          rm -f scripts/apply-runtime-text-core-v3.py
-          git config user.name "SuperDictate automation"
-          git config user.email "actions@users.noreply.github.com"
-          git add -A
-          git commit -m "Route live text processing through product core"
-          git push origin HEAD:refactor/runtime-text-core-v3
       - name: Validate scripts and plists
         run: ./scripts/check.sh
       - name: Swift self-tests
