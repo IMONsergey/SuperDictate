@@ -37,10 +37,24 @@ public struct SuperDictateMainView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if snapshot.status == .needsAttention {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(SuperDictateDesign.ColorRole.warning)
-                        .help(snapshot.issueMessage ?? copy.needsAttention)
+                    Button {
+                        onCommand(.openSystemStatus)
+                    } label: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(SuperDictateDesign.ColorRole.warning)
+                    }
+                    .buttonStyle(.plain)
+                    .help(snapshot.issueMessage ?? copy.openSystemStatus)
                 }
+
+                Menu {
+                    Button(copy.systemStatus) {
+                        onCommand(.openSystemStatus)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .help(copy.more)
 
                 Button {
                     onCommand(snapshot.primaryCaptureCommand)
@@ -161,8 +175,10 @@ private struct TodayView: View {
 
                 if snapshot.isCaptureActive {
                     RecordingNowRow(startedAt: snapshot.activeRecordingStartedAt, copy: copy)
+                } else if snapshot.status == .starting {
+                    ProcessingRow(text: copy.startingService)
                 } else if snapshot.status == .transcribing {
-                    ProcessingRow(copy: copy)
+                    ProcessingRow(text: copy.processingLatest)
                 } else if let issue = snapshot.issueMessage {
                     AttentionRow(message: issue)
                 } else if snapshot.recordings.isEmpty && snapshot.tasks.isEmpty {
@@ -201,6 +217,7 @@ private struct TodayView: View {
 
     private var todaySubtitle: String {
         switch snapshot.status {
+        case .starting: return copy.startingService
         case .recording: return copy.recordingLocally
         case .transcribing: return copy.transcribingLatest
         case .needsAttention: return copy.attentionSubtitle
@@ -484,13 +501,13 @@ private struct RecordingNowRow: View {
 }
 
 private struct ProcessingRow: View {
-    let copy: SuperDictateCopy
+    let text: String
 
     var body: some View {
         HStack(spacing: SuperDictateDesign.Spacing.compact) {
             ProgressView()
                 .controlSize(.small)
-            Text(copy.processingLatest)
+            Text(text)
                 .font(SuperDictateDesign.TypeStyle.interface)
         }
     }

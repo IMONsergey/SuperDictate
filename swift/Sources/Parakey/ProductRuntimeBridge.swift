@@ -7,9 +7,6 @@ private let PRODUCT_CAPTURE_COMMAND_NOTIFICATION = Notification.Name("com.local.
 private let PRODUCT_CAPTURE_COMMAND_KEY = "command"
 private let PRODUCT_CAPTURE_SENDER_PID_KEY = "senderPID"
 
-/// Narrow command vocabulary between the visible control-panel process and the
-/// background agent. Keep this deliberately smaller than the product command
-/// enum: UI-only navigation/settings never need to cross the process boundary.
 enum ProductCaptureCommand: String, Sendable {
     case start
     case stop
@@ -29,13 +26,6 @@ enum ProductCaptureCommandSender {
     }
 }
 
-/// Receives capture commands inside the background agent.
-///
-/// A start request is accepted only when it comes from another process running
-/// the exact same installed app bundle and that process is currently frontmost.
-/// This prevents a generic distributed notification from becoming a stealth
-/// recording API. Stop remains available to the same trusted bundle even if
-/// focus changes between the click and delivery.
 @MainActor
 final class ProductCaptureCommandObserver: NSObject {
     private let onStart: @MainActor () -> Void
@@ -97,13 +87,10 @@ final class ProductCaptureCommandObserver: NSObject {
               let senderBundleURL = sender.bundleURL?.standardizedFileURL else {
             return false
         }
-        let ownBundleURL = Bundle.main.bundleURL.standardizedFileURL
-        return senderBundleURL == ownBundleURL
+        return senderBundleURL == Bundle.main.bundleURL.standardizedFileURL
     }
 }
 
-/// Converts legacy recent-history data into the new product-facing state without
-/// inventing metadata that the v0.2.37 archive does not contain.
 @MainActor
 func makeSuperDictateProductSnapshot(
     settings: Settings,
@@ -122,17 +109,17 @@ func makeSuperDictateProductSnapshot(
             id: stableProductRecordingID(text: text, occurrence: occurrence),
             title: productRecordingTitle(text: text, language: language),
             transcript: text,
-            summary: nil,
             createdAt: nil,
-            durationSeconds: nil,
-            people: [],
-            requiresAttention: false
+            durationSeconds: nil
         )
     }
 
     let status: SuperDictateRuntimeStatus
     let issueMessage: String?
-    if !agentRunning {
+    if agentState?.status == "starting" {
+        status = .starting
+        issueMessage = nil
+    } else if !agentRunning {
         status = .needsAttention
         issueMessage = localizedText(
             "Фоновая служба диктовки не запущена.",
@@ -146,7 +133,7 @@ func makeSuperDictateProductSnapshot(
         status = .transcribing
         issueMessage = nil
     } else if let agentState,
-              agentState.status == "error" || agentState.status == "needs_permissions" || agentState.status == "stopped" {
+              ["error", "needs_permissions", "stopped", "stopping"].contains(agentState.status) {
         status = .needsAttention
         let fallback = localizedText(
             "SuperDictate требует внимания.",
@@ -171,14 +158,11 @@ func makeSuperDictateProductSnapshot(
 }
 
 private func productRecordingTitle(text: String, language: InterfaceLanguage) -> String {
-    let flat = text
-        .split(whereSeparator: { $0.isWhitespace })
-        .joined(separator: " ")
+    let flat = text.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
     guard !flat.isEmpty else {
         return localizedText("Без названия", "Untitled", language: language)
     }
-    if flat.count <= 68 { return flat }
-    return String(flat.prefix(67)) + "…"
+    return flat.count <= 68 ? flat : String(flat.prefix(67)) + "…"
 }
 
 private func stableProductRecordingID(text: String, occurrence: Int) -> UUID {
