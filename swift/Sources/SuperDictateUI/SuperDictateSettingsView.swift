@@ -11,6 +11,7 @@ public struct SuperDictateSettingsView: View {
     private let onCommand: (SuperDictateSettingsCommand) -> Void
 
     @State private var section: SuperDictateSettingsSection = .dictation
+    @State private var confirmClearHistory = false
 
     public init(
         snapshot: SuperDictateSettingsSnapshot,
@@ -43,6 +44,21 @@ public struct SuperDictateSettingsView: View {
             .background(SuperDictateDesign.ColorRole.canvas)
         }
         .frame(minWidth: 760, minHeight: 520)
+        .confirmationDialog(
+            text("Очистить историю?", "Clear History?"),
+            isPresented: $confirmClearHistory,
+            titleVisibility: .visible
+        ) {
+            Button(text("Очистить историю", "Clear History"), role: .destructive) {
+                onCommand(.clearTranscriptHistory)
+            }
+            Button(text("Отмена", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(text(
+                "Будут удалены локальный список недавних диктовок и Library. Новые диктовки снова начнут сохраняться, если режим не выключен.",
+                "The local recent-dictation cache and Library will be cleared. New dictations will be stored again unless history is Off."
+            ))
+        }
     }
 
     private var copy: SuperDictateCopy { SuperDictateCopy(language: language) }
@@ -59,19 +75,15 @@ public struct SuperDictateSettingsView: View {
 
     private var dictationSection: some View {
         SettingsGroup {
-            SettingsValueRow(title: text("Основная комбинация", "Primary shortcut"),
-                             value: snapshot.primaryShortcut)
+            SettingsValueRow(title: text("Основная комбинация", "Primary shortcut"), value: snapshot.primaryShortcut)
             if let alternate = snapshot.alternateShortcut {
-                SettingsValueRow(title: text("Альтернативное завершение", "Alternate completion"),
-                                 value: alternate)
+                SettingsValueRow(title: text("Альтернативное завершение", "Alternate completion"), value: alternate)
             }
             if let history = snapshot.historyShortcut {
                 SettingsValueRow(title: text("История", "History shortcut"), value: history)
             }
-            SettingsValueRow(title: text("Режим запуска", "Trigger mode"),
-                             value: snapshot.triggerMode)
-            SettingsValueRow(title: text("После диктовки", "Completion behavior"),
-                             value: snapshot.completionBehavior)
+            SettingsValueRow(title: text("Режим запуска", "Trigger mode"), value: snapshot.triggerMode)
+            SettingsValueRow(title: text("После диктовки", "Completion behavior"), value: snapshot.completionBehavior)
             Toggle(
                 text("Убирать слова-паразиты", "Remove filler words"),
                 isOn: Binding(
@@ -123,22 +135,34 @@ public struct SuperDictateSettingsView: View {
 
     private var privacySection: some View {
         SettingsGroup {
-            Toggle(
-                text("Сохранять историю диктовок", "Keep dictation history"),
-                isOn: Binding(
-                    get: { snapshot.historyEnabled },
-                    set: { onCommand(.setHistoryEnabled($0)) }
-                )
+            HStack {
+                Text(text("Недавние диктовки", "Recent dictations"))
+                Spacer()
+                Picker(
+                    "",
+                    selection: Binding(
+                        get: { snapshot.recentTranscriptMode },
+                        set: { onCommand(.setRecentTranscriptMode($0)) }
+                    )
+                ) {
+                    ForEach(SuperDictateRecentTranscriptMode.allCases) { mode in
+                        Text(recentModeTitle(mode)).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 170)
+            }
+
+            SettingsValueRow(
+                title: text("Записей в библиотеке", "Library recordings"),
+                value: String(snapshot.libraryRecordingCount)
             )
-            SettingsValueRow(title: text("Лимит истории", "History limit"),
-                             value: snapshot.historyLimitDescription)
-            SettingsValueRow(title: text("Записей в библиотеке", "Library recordings"),
-                             value: String(snapshot.libraryRecordingCount))
 
             Label(
                 text(
-                    "Библиотека и поиск работают локально. Отключение истории скрывает и очищает локальный индекс.",
-                    "Library and search are local. Turning history off hides and clears the local index."
+                    "1 / 5 / 10 управляет только быстрым списком недавних. Локальная Library может хранить более ранние записи. «Не сохранять» отключает историю и очищает локальный индекс.",
+                    "1 / 5 / 10 controls only the quick recent list. The local Library may retain older recordings. Off disables transcript history and clears the local index."
                 ),
                 systemImage: "lock.shield"
             )
@@ -148,22 +172,17 @@ public struct SuperDictateSettingsView: View {
             Divider()
 
             Button(role: .destructive) {
-                onCommand(.clearLibraryHistory)
+                confirmClearHistory = true
             } label: {
-                Label(text("Очистить библиотеку…", "Clear Library…"), systemImage: "trash")
+                Label(text("Очистить историю…", "Clear History…"), systemImage: "trash")
             }
-            .disabled(snapshot.libraryRecordingCount == 0)
-            .help(text(
-                "Удаляет локальный индекс библиотеки. Это отдельное действие и не выводится из очистки списка недавних.",
-                "Deletes the local Library index. This is explicit and is not inferred from clearing the recent cache."
-            ))
+            .disabled(!snapshot.historyEnabled && snapshot.libraryRecordingCount == 0)
         }
     }
 
     private var systemSection: some View {
         SettingsGroup {
-            SettingsValueRow(title: text("Фоновая служба", "Background service"),
-                             value: serviceLabel)
+            SettingsValueRow(title: text("Фоновая служба", "Background service"), value: serviceLabel)
 
             ForEach(snapshot.permissions) { permission in
                 HStack {
@@ -247,6 +266,15 @@ public struct SuperDictateSettingsView: View {
         case .starting: return text("Запускается", "Starting")
         case .stopped: return text("Остановлена", "Stopped")
         case .needsAttention: return text("Требует внимания", "Needs attention")
+        }
+    }
+
+    private func recentModeTitle(_ mode: SuperDictateRecentTranscriptMode) -> String {
+        switch mode {
+        case .off: return text("Не сохранять", "Off")
+        case .last1: return text("Последняя 1", "Last 1")
+        case .last5: return text("Последние 5", "Last 5")
+        case .last10: return text("Последние 10", "Last 10")
         }
     }
 
