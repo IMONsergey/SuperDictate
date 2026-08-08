@@ -124,22 +124,22 @@ public struct SuperDictateSettingsView: View {
     private var privacySection: some View {
         SettingsGroup {
             HStack {
-                Text(text("Хранить историю", "Keep history"))
+                Text(text("Недавние диктовки", "Recent dictations"))
                 Spacer()
                 Picker(
                     "",
                     selection: Binding(
-                        get: { snapshot.historyRetention },
-                        set: { onCommand(.setHistoryRetention($0)) }
+                        get: { snapshot.recentTranscriptMode },
+                        set: { onCommand(.setRecentTranscriptMode($0)) }
                     )
                 ) {
-                    ForEach(SuperDictateHistoryRetention.allCases) { retention in
-                        Text(retentionTitle(retention)).tag(retention)
+                    ForEach(SuperDictateRecentTranscriptMode.allCases) { mode in
+                        Text(recentModeTitle(mode)).tag(mode)
                     }
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .frame(width: 150)
+                .frame(width: 170)
             }
 
             SettingsValueRow(title: text("Записей в библиотеке", "Library recordings"),
@@ -147,8 +147,8 @@ public struct SuperDictateSettingsView: View {
 
             Label(
                 text(
-                    "Библиотека и поиск работают локально. Режим «Не сохранять» очищает recent history и локальный индекс.",
-                    "Library and search are local. Choosing Off clears recent history and the local index."
+                    "1 / 5 / 10 управляет только быстрым списком недавних. Локальная Library может хранить более ранние записи. «Не сохранять» отключает историю и очищает локальный индекс.",
+                    "1 / 5 / 10 controls only the quick recent list. The local Library may retain older recordings. Off disables transcript history and clears the local index."
                 ),
                 systemImage: "lock.shield"
             )
@@ -164,8 +164,8 @@ public struct SuperDictateSettingsView: View {
             }
             .disabled(!snapshot.historyEnabled && snapshot.libraryRecordingCount == 0)
             .help(text(
-                "Удаляет локальный список недавних диктовок и durable Library. Удаление одной строки из recent history не считается удалением из Library.",
-                "Clears both the local recent-dictation cache and durable Library. Removing one recent row is not treated as a Library deletion."
+                "Удаляет recent-history cache и durable Library. После очистки новые диктовки снова сохраняются, если история не выключена.",
+                "Clears both the recent-history cache and durable Library. New dictations are stored again unless history is Off."
             ))
         }
     }
@@ -260,12 +260,12 @@ public struct SuperDictateSettingsView: View {
         }
     }
 
-    private func retentionTitle(_ retention: SuperDictateHistoryRetention) -> String {
-        switch retention {
+    private func recentModeTitle(_ mode: SuperDictateRecentTranscriptMode) -> String {
+        switch mode {
         case .off: return text("Не сохранять", "Off")
-        case .last1: return text("Последняя 1", "Last 1")
-        case .last5: return text("Последние 5", "Last 5")
-        case .last10: return text("Последние 10", "Last 10")
+        case .last1: return text("Показывать 1", "Show 1")
+        case .last5: return text("Показывать 5", "Show 5")
+        case .last10: return text("Показывать 10", "Show 10")
         }
     }
 
