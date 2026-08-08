@@ -65,7 +65,8 @@ extension ProductStateTests {
         XCTAssertTrue(result.quarantinedFileNames.isEmpty)
         XCTAssertTrue(result.missingChunkIDs.isEmpty)
 
-        let manifest = try XCTUnwrap(try await store.loadManifest(recordingID: recordingID))
+        let maybeManifest = try await store.loadManifest(recordingID: recordingID)
+        let manifest = try XCTUnwrap(maybeManifest)
         XCTAssertEqual(manifest.chunks.count, 1)
         XCTAssertEqual(manifest.chunks.first?.id, chunkID)
         XCTAssertEqual(manifest.chunks.first?.relativePath, event.relativePath)
@@ -100,7 +101,8 @@ extension ProductStateTests {
         XCTAssertEqual(result.state, .needsAttention)
         XCTAssertEqual(result.quarantinedFileNames.count, 1)
         XCTAssertFalse(FileManager.default.fileExists(atPath: finalURL.path))
-        let manifest = try XCTUnwrap(try await store.loadManifest(recordingID: recordingID))
+        let maybeManifest = try await store.loadManifest(recordingID: recordingID)
+        let manifest = try XCTUnwrap(maybeManifest)
         XCTAssertEqual(manifest.state, .needsAttention)
         XCTAssertTrue(manifest.chunks.isEmpty)
     }
@@ -129,7 +131,8 @@ extension ProductStateTests {
         XCTAssertEqual(result.state, .needsAttention)
         XCTAssertEqual(result.quarantinedFileNames.count, 1)
         XCTAssertFalse(FileManager.default.fileExists(atPath: partial.path))
-        let manifest = try XCTUnwrap(try await store.loadManifest(recordingID: recordingID))
+        let maybeManifest = try await store.loadManifest(recordingID: recordingID)
+        let manifest = try XCTUnwrap(maybeManifest)
         XCTAssertEqual(manifest.state, .needsAttention)
         XCTAssertTrue(manifest.chunks.isEmpty)
     }
@@ -202,7 +205,8 @@ extension ProductStateTests {
         XCTAssertEqual(result.checksumMismatchChunkIDs, [chunkID])
         XCTAssertEqual(result.quarantinedFileNames.count, 1)
         XCTAssertFalse(FileManager.default.fileExists(atPath: finalURL.path))
-        let manifest = try XCTUnwrap(try await store.loadManifest(recordingID: recordingID))
+        let maybeManifest = try await store.loadManifest(recordingID: recordingID)
+        let manifest = try XCTUnwrap(maybeManifest)
         XCTAssertEqual(manifest.state, .needsAttention)
         XCTAssertEqual(manifest.chunks.map(\.id), [chunkID])
     }
@@ -246,7 +250,8 @@ extension ProductStateTests {
             .recover(recordingID: recordingID)
         XCTAssertEqual(result.state, .needsAttention)
         XCTAssertEqual(result.missingChunkIDs, [chunkID])
-        let manifest = try XCTUnwrap(try await store.loadManifest(recordingID: recordingID))
+        let maybeManifest = try await store.loadManifest(recordingID: recordingID)
+        let manifest = try XCTUnwrap(maybeManifest)
         XCTAssertEqual(manifest.state, .needsAttention)
     }
 
