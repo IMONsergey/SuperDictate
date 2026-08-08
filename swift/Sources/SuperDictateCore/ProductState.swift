@@ -28,11 +28,21 @@ public enum SuperDictateRecordingSection: String, CaseIterable, Codable, Sendabl
     public var id: String { rawValue }
 }
 
+/// Product-level origin/lifecycle of a Library recording.
+public enum SuperDictateCaptureKind: String, Codable, CaseIterable, Sendable {
+    case instantDictation = "instant_dictation"
+    case memoryRecording = "memory_recording"
+    case imported
+}
+
 public struct SuperDictateRecording: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID
     public var title: String
     public var transcript: String
     public var summary: String?
+    /// Optional for backward compatibility with Library archives written before
+    /// capture kinds existed. A nil legacy value behaves as instant dictation.
+    public var captureKind: SuperDictateCaptureKind?
     /// `nil` means the backing runtime does not know the capture timestamp.
     /// The UI must not substitute the current date and present it as source truth.
     public var createdAt: Date?
@@ -45,6 +55,7 @@ public struct SuperDictateRecording: Identifiable, Codable, Equatable, Sendable 
         title: String,
         transcript: String,
         summary: String? = nil,
+        captureKind: SuperDictateCaptureKind? = .instantDictation,
         createdAt: Date? = nil,
         durationSeconds: TimeInterval? = nil,
         people: [String] = [],
@@ -54,10 +65,15 @@ public struct SuperDictateRecording: Identifiable, Codable, Equatable, Sendable 
         self.title = title
         self.transcript = transcript
         self.summary = summary
+        self.captureKind = captureKind
         self.createdAt = createdAt
         self.durationSeconds = durationSeconds
         self.people = people
         self.requiresAttention = requiresAttention
+    }
+
+    public var effectiveCaptureKind: SuperDictateCaptureKind {
+        captureKind ?? .instantDictation
     }
 }
 
