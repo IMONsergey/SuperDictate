@@ -673,10 +673,16 @@ struct TranscriptHistoryEntry: Codable, Equatable {
     let text: String
     let transcriptionDurationSeconds: Double?
     let asrTiming: ASRTimingBreakdown?
+    let recordingID: UUID?
+    let createdAt: Date?
+    let sourceAudioDurationSeconds: Double?
 
     init(text: String,
          transcriptionDurationSeconds: Double? = nil,
-         asrTiming: ASRTimingBreakdown? = nil) {
+         asrTiming: ASRTimingBreakdown? = nil,
+         recordingID: UUID? = nil,
+         createdAt: Date? = nil,
+         sourceAudioDurationSeconds: Double? = nil) {
         self.text = text
         if let duration = transcriptionDurationSeconds,
            duration.isFinite,
@@ -686,6 +692,15 @@ struct TranscriptHistoryEntry: Codable, Equatable {
             self.transcriptionDurationSeconds = nil
         }
         self.asrTiming = asrTiming
+        self.recordingID = recordingID
+        self.createdAt = createdAt
+        if let duration = sourceAudioDurationSeconds,
+           duration.isFinite,
+           duration >= 0 {
+            self.sourceAudioDurationSeconds = duration
+        } else {
+            self.sourceAudioDurationSeconds = nil
+        }
     }
 }
 
@@ -2772,7 +2787,10 @@ final class Settings: @unchecked Sendable {
                     return TranscriptHistoryEntry(
                         text: text,
                         transcriptionDurationSeconds: entry.transcriptionDurationSeconds,
-                        asrTiming: entry.asrTiming
+                        asrTiming: entry.asrTiming,
+                        recordingID: entry.recordingID,
+                        createdAt: entry.createdAt,
+                        sourceAudioDurationSeconds: entry.sourceAudioDurationSeconds
                     )
                 }
                 return limitedTranscriptHistoryArchive(cleaned)
@@ -2788,7 +2806,10 @@ final class Settings: @unchecked Sendable {
                     return TranscriptHistoryEntry(
                         text: text,
                         transcriptionDurationSeconds: entry.transcriptionDurationSeconds,
-                        asrTiming: entry.asrTiming
+                        asrTiming: entry.asrTiming,
+                        recordingID: entry.recordingID,
+                        createdAt: entry.createdAt,
+                        sourceAudioDurationSeconds: entry.sourceAudioDurationSeconds
                     )
                 }
             )
@@ -9530,6 +9551,7 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let settings = Settings.shared
 
     private var isRecording = false
+    private var activeRecordingIdentity: ProductRecordingIdentity?
     private var isBusy = false
     private var isReady = false
     private var isCoreRuntimeReady = false
@@ -9774,7 +9796,10 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 history.map {
                     ProductLegacyHistoryValue(
                         text: $0.text,
-                        transcriptionDurationSeconds: $0.transcriptionDurationSeconds
+                        transcriptionDurationSeconds: $0.transcriptionDurationSeconds,
+                        recordingID: $0.recordingID,
+                        createdAt: $0.createdAt,
+                        sourceAudioDurationSeconds: $0.sourceAudioDurationSeconds
                     )
                 }
             )
@@ -11422,6 +11447,7 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
         isRecording = true
+        activeRecordingIdentity = .now()
         if setupChecklistWindow?.isVisible == true {
             hotkeyTestSucceeded = true
             updateSetupChecklist()
@@ -11459,6 +11485,8 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
 
+        let recordingIdentity = activeRecordingIdentity
+        activeRecordingIdentity = nil
         isRecording = false
         stopRecordingLevelMeter(hideHUD: false)
         cancelMaxDurationAutoRelease()
@@ -11541,6 +11569,9 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                             cleaned,
                             transcriptionDurationSeconds: asrTiming.totalSeconds,
                             asrTiming: asrTiming,
+                            recordingID: recordingIdentity?.id,
+                            createdAt: recordingIdentity?.createdAt,
+                            sourceAudioDurationSeconds: dur,
                             rebuildMenuAfterPersisting: false
                         )
                         recordDictationUsage(text: cleaned,
@@ -11646,6 +11677,8 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return
         }
 
+        let recordingIdentity = activeRecordingIdentity
+        activeRecordingIdentity = nil
         cancelMaxDurationAutoRelease()
         let captured = audio.endRecording()
         let duration = Double(captured.samples.count) / SAMPLE_RATE
@@ -11690,7 +11723,10 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                         addToHistory(
                             processed.text,
                             transcriptionDurationSeconds: timing.totalSeconds,
-                            asrTiming: timing
+                            asrTiming: timing,
+                            recordingID: recordingIdentity?.id,
+                            createdAt: recordingIdentity?.createdAt,
+                            sourceAudioDurationSeconds: duration
                         )
                         recordDictationUsage(text: processed.text,
                                              audioSeconds: duration,
@@ -12008,12 +12044,18 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func addToHistory(_ text: String,
                               transcriptionDurationSeconds: Double?,
                               asrTiming: ASRTimingBreakdown? = nil,
+                              recordingID: UUID? = nil,
+                              createdAt: Date? = nil,
+                              sourceAudioDurationSeconds: Double? = nil,
                               rebuildMenuAfterPersisting: Bool = true) {
         guard settings.recentTranscriptLimit != .off else { return }
         let entry = TranscriptHistoryEntry(
             text: text,
             transcriptionDurationSeconds: transcriptionDurationSeconds,
-            asrTiming: asrTiming
+            asrTiming: asrTiming,
+            recordingID: recordingID,
+            createdAt: createdAt,
+            sourceAudioDurationSeconds: sourceAudioDurationSeconds
         )
         let next = limitedTranscriptHistoryArchive([entry] + history)
         guard next != history else { return }
@@ -12023,7 +12065,10 @@ final class ParakeyApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             history.map {
                 ProductLegacyHistoryValue(
                     text: $0.text,
-                    transcriptionDurationSeconds: $0.transcriptionDurationSeconds
+                    transcriptionDurationSeconds: $0.transcriptionDurationSeconds,
+                    recordingID: $0.recordingID,
+                    createdAt: $0.createdAt,
+                    sourceAudioDurationSeconds: $0.sourceAudioDurationSeconds
                 )
             }
         )
