@@ -6,6 +6,14 @@ public enum SuperDictateMemoryAudioSource: String, Codable, CaseIterable, Sendab
     case imported
 }
 
+public enum SuperDictateMemoryAudioContainer: String, Codable, Sendable {
+    case caf
+}
+
+public enum SuperDictateMemoryAudioCodec: String, Codable, Sendable {
+    case linearPCM = "linear_pcm"
+}
+
 public enum SuperDictateMemorySessionState: String, Codable, Sendable {
     case recording
     case finalizing
@@ -33,6 +41,8 @@ public struct SuperDictateMemoryAudioChunk: Identifiable, Codable, Equatable, Se
     public var relativePath: String
     public var sessionStartMilliseconds: Int64
     public var sessionEndMilliseconds: Int64
+    public var container: SuperDictateMemoryAudioContainer
+    public var codec: SuperDictateMemoryAudioCodec
     public var sampleRate: Int
     public var channelCount: Int
     public var byteLength: Int64
@@ -45,6 +55,8 @@ public struct SuperDictateMemoryAudioChunk: Identifiable, Codable, Equatable, Se
         case relativePath
         case sessionStartMilliseconds
         case sessionEndMilliseconds
+        case container
+        case codec
         case sampleRate
         case channelCount
         case byteLength
@@ -58,6 +70,8 @@ public struct SuperDictateMemoryAudioChunk: Identifiable, Codable, Equatable, Se
         relativePath: String,
         sessionStartMilliseconds: Int64,
         sessionEndMilliseconds: Int64,
+        container: SuperDictateMemoryAudioContainer = .caf,
+        codec: SuperDictateMemoryAudioCodec = .linearPCM,
         sampleRate: Int,
         channelCount: Int,
         byteLength: Int64,
@@ -91,6 +105,8 @@ public struct SuperDictateMemoryAudioChunk: Identifiable, Codable, Equatable, Se
         self.relativePath = path
         self.sessionStartMilliseconds = sessionStartMilliseconds
         self.sessionEndMilliseconds = sessionEndMilliseconds
+        self.container = container
+        self.codec = codec
         self.sampleRate = sampleRate
         self.channelCount = channelCount
         self.byteLength = byteLength
@@ -106,6 +122,8 @@ public struct SuperDictateMemoryAudioChunk: Identifiable, Codable, Equatable, Se
             relativePath: container.decode(String.self, forKey: .relativePath),
             sessionStartMilliseconds: container.decode(Int64.self, forKey: .sessionStartMilliseconds),
             sessionEndMilliseconds: container.decode(Int64.self, forKey: .sessionEndMilliseconds),
+            container: container.decode(SuperDictateMemoryAudioContainer.self, forKey: .container),
+            codec: container.decode(SuperDictateMemoryAudioCodec.self, forKey: .codec),
             sampleRate: container.decode(Int.self, forKey: .sampleRate),
             channelCount: container.decode(Int.self, forKey: .channelCount),
             byteLength: container.decode(Int64.self, forKey: .byteLength),
