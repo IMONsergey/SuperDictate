@@ -86,6 +86,7 @@ public actor SuperDictateMemoryPackageRecovery {
 
         let packageURL = await store.packageURL(recordingID: recordingID)
         let quarantineURL = await store.quarantineDirectory(recordingID: recordingID)
+        try validateDirectoryNoFollow(quarantineURL, normalizePermissions: true)
 
         // First validate every chunk the manifest already claims as durable.
         var referencedRelativePaths: Set<String> = []
@@ -305,8 +306,10 @@ public actor SuperDictateMemoryPackageRecovery {
         throw SuperDictateMemoryRecoveryError.posix(errno)
     }
 
-    private func sourceFiles(_ directory: URL) throws -> [URL] {
-        guard try pathEntryExists(directory) else { return [] }
+    private func validateDirectoryNoFollow(
+        _ directory: URL,
+        normalizePermissions: Bool = false
+    ) throws {
         var st = stat()
         guard Darwin.lstat(directory.path, &st) == 0 else {
             throw SuperDictateMemoryRecoveryError.posix(errno)
@@ -314,6 +317,16 @@ public actor SuperDictateMemoryPackageRecovery {
         guard (st.st_mode & S_IFMT) == S_IFDIR else {
             throw SuperDictateMemoryRecoveryError.unsafeFileType(directory.lastPathComponent)
         }
+        if normalizePermissions {
+            guard Darwin.chmod(directory.path, mode_t(0o700)) == 0 else {
+                throw SuperDictateMemoryRecoveryError.posix(errno)
+            }
+        }
+    }
+
+    private func sourceFiles(_ directory: URL) throws -> [URL] {
+        guard try pathEntryExists(directory) else { return [] }
+        try validateDirectoryNoFollow(directory)
         return try fileManager.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: nil,
@@ -323,6 +336,10 @@ public actor SuperDictateMemoryPackageRecovery {
     }
 
     private func quarantine(_ url: URL, into directory: URL) throws -> String {
+        // Validate the destination before constructing/moving anything. A
+        // tampered symlink named `quarantine` must never redirect preserved
+        // source bytes outside the recording package.
+        try validateDirectoryNoFollow(directory, normalizePermissions: true)
         let destination = directory.appendingPathComponent(
             "\(url.lastPathComponent).quarantine.\(UUID().uuidString.lowercased())",
             isDirectory: false
