@@ -14,7 +14,6 @@ public enum SuperDictateMemorySessionState: String, Codable, Sendable {
 }
 
 public enum SuperDictateMemoryManifestError: Error, Equatable, Sendable {
-    case invalidRecordingID
     case invalidChunkPath(String)
     case invalidSHA256(String)
     case invalidTiming
@@ -38,6 +37,19 @@ public struct SuperDictateMemoryAudioChunk: Identifiable, Codable, Equatable, Se
     public var channelCount: Int
     public var byteLength: Int64
     public var sha256: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case source
+        case sequence
+        case relativePath
+        case sessionStartMilliseconds
+        case sessionEndMilliseconds
+        case sampleRate
+        case channelCount
+        case byteLength
+        case sha256
+    }
 
     public init(
         id: UUID = UUID(),
@@ -85,6 +97,22 @@ public struct SuperDictateMemoryAudioChunk: Identifiable, Codable, Equatable, Se
         self.sha256 = digest
     }
 
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            id: container.decode(UUID.self, forKey: .id),
+            source: container.decode(SuperDictateMemoryAudioSource.self, forKey: .source),
+            sequence: container.decode(Int.self, forKey: .sequence),
+            relativePath: container.decode(String.self, forKey: .relativePath),
+            sessionStartMilliseconds: container.decode(Int64.self, forKey: .sessionStartMilliseconds),
+            sessionEndMilliseconds: container.decode(Int64.self, forKey: .sessionEndMilliseconds),
+            sampleRate: container.decode(Int.self, forKey: .sampleRate),
+            channelCount: container.decode(Int.self, forKey: .channelCount),
+            byteLength: container.decode(Int64.self, forKey: .byteLength),
+            sha256: container.decode(String.self, forKey: .sha256)
+        )
+    }
+
     private static func isSafeRelativePath(_ path: String) -> Bool {
         guard !path.isEmpty,
               !path.hasPrefix("/"),
@@ -108,6 +136,14 @@ public struct SuperDictateMemoryRecordingManifest: Codable, Equatable, Sendable 
     public var chunks: [SuperDictateMemoryAudioChunk]
     public var issue: String?
 
+    private enum CodingKeys: String, CodingKey {
+        case recordingID
+        case createdAt
+        case state
+        case chunks
+        case issue
+    }
+
     public init(
         recordingID: UUID,
         createdAt: Date,
@@ -122,6 +158,17 @@ public struct SuperDictateMemoryRecordingManifest: Codable, Equatable, Sendable 
         let trimmedIssue = issue?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.issue = trimmedIssue?.isEmpty == false ? trimmedIssue : nil
         try validate()
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            recordingID: container.decode(UUID.self, forKey: .recordingID),
+            createdAt: container.decode(Date.self, forKey: .createdAt),
+            state: container.decode(SuperDictateMemorySessionState.self, forKey: .state),
+            chunks: container.decode([SuperDictateMemoryAudioChunk].self, forKey: .chunks),
+            issue: container.decodeIfPresent(String.self, forKey: .issue)
+        )
     }
 
     public mutating func appendFinalizedChunk(_ chunk: SuperDictateMemoryAudioChunk) throws {
