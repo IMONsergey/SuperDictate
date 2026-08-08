@@ -21,7 +21,7 @@ final class ProductStateTests: XCTestCase {
         XCTAssertEqual(recording.primaryCaptureCommand, .stopRecording)
     }
 
-    func testSnapshotOrdersRecentRecordingsNewestFirst() {
+    func testSnapshotOrdersDatedRecordingsNewestFirst() {
         let old = SuperDictateRecording(
             title: "Old",
             transcript: "old",
@@ -35,6 +35,28 @@ final class ProductStateTests: XCTestCase {
 
         let snapshot = SuperDictateProductSnapshot(recordings: [old, newest])
         XCTAssertEqual(snapshot.recordings.map(\.title), ["Newest", "Old"])
+    }
+
+    func testSnapshotPreservesSourceOrderWhenLegacyHistoryHasNoDates() {
+        let newest = SuperDictateRecording(title: "Newest source row", transcript: "new")
+        let older = SuperDictateRecording(title: "Older source row", transcript: "old")
+
+        let snapshot = SuperDictateProductSnapshot(recordings: [newest, older])
+        XCTAssertEqual(snapshot.recordings.map(\.title), ["Newest source row", "Older source row"])
+        XCTAssertNil(snapshot.recordings.first?.createdAt)
+    }
+
+    func testKnownDatesSortAheadOfUnknownDatesWithoutInventingMetadata() {
+        let unknown = SuperDictateRecording(title: "Legacy", transcript: "legacy")
+        let dated = SuperDictateRecording(
+            title: "Dated",
+            transcript: "dated",
+            createdAt: Date(timeIntervalSince1970: 20)
+        )
+
+        let snapshot = SuperDictateProductSnapshot(recordings: [unknown, dated])
+        XCTAssertEqual(snapshot.recordings.map(\.title), ["Dated", "Legacy"])
+        XCTAssertNil(snapshot.recordings.last?.createdAt)
     }
 
     func testTodaySeparatesAttentionAndActionableWork() {
