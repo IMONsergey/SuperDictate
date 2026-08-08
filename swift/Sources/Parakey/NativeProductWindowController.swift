@@ -141,7 +141,6 @@ final class NativeProductWindowController: NSObject, NSWindowDelegate {
         guard librarySyncTask == nil else { return }
         librarySyncTask = Task { [weak self] in
             guard let self else { return }
-            defer { self.librarySyncTask = nil }
 
             do {
                 var archive = try await libraryStore.load()
@@ -171,6 +170,7 @@ final class NativeProductWindowController: NSObject, NSWindowDelegate {
                 self.libraryLoaded = true
                 self.applyCombinedSnapshot()
             } catch is CancellationError {
+                self.librarySyncTask = nil
                 return
             } catch {
                 // Library is a rebuildable private index. A read/write failure
@@ -180,11 +180,10 @@ final class NativeProductWindowController: NSObject, NSWindowDelegate {
                 self.applyCombinedSnapshot()
             }
 
-            if self.pendingRuntimeRecordings != nil {
-                self.scheduleLibrarySync(
-                    recordings: self.pendingRuntimeRecordings ?? [],
-                    forceReload: true
-                )
+            let pending = self.pendingRuntimeRecordings
+            self.librarySyncTask = nil
+            if let pending {
+                self.scheduleLibrarySync(recordings: pending, forceReload: true)
             }
         }
     }
