@@ -15,7 +15,11 @@ extension ProductStateTests {
             chunkID: chunkID,
             source: .microphone,
             sequence: sequence,
-            relativePath: "audio/microphone/000000__\(chunkID.uuidString.lowercased()).caf",
+            relativePath: SuperDictateMemoryAudioChunk.canonicalRelativePath(
+                source: .microphone,
+                sequence: sequence,
+                chunkID: chunkID
+            ),
             sessionStartMilliseconds: 0,
             sessionEndMilliseconds: 1_000,
             sampleRate: 48_000,
