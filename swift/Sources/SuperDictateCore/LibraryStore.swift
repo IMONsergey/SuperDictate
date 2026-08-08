@@ -10,6 +10,9 @@ public enum SuperDictateLibraryStoreError: Error, Equatable, Sendable {
     case duplicateRecording(UUID)
     case duplicateTask(UUID)
     case duplicateMemoryDocument(UUID)
+    case memoryDocumentRecordingMismatch(recordingID: UUID, documentID: UUID)
+    case orphanMemoryDocument(UUID)
+    case orphanTaskSource(taskID: UUID, recordingID: UUID)
 }
 
 public struct SuperDictateLibraryArchive: Codable, Equatable, Sendable {
@@ -178,8 +181,9 @@ public actor JSONSuperDictateLibraryStore: SuperDictateLibraryStoring {
 
         if let memoryDocument {
             guard memoryDocument.recordingID == recording.id else {
-                throw SuperDictateLibraryStoreError.duplicateMemoryDocument(
-                    memoryDocument.recordingID
+                throw SuperDictateLibraryStoreError.memoryDocumentRecordingMismatch(
+                    recordingID: recording.id,
+                    documentID: memoryDocument.recordingID
                 )
             }
             if let index = archive.memoryDocuments.firstIndex(
@@ -201,6 +205,14 @@ public actor JSONSuperDictateLibraryStore: SuperDictateLibraryStoring {
 
     public func upsertTask(_ task: SuperDictateTask) async throws {
         var archive = try await load()
+        if let sourceRecordingID = task.sourceRecordingID,
+           !archive.recordings.contains(where: { $0.id == sourceRecordingID }) {
+            throw SuperDictateLibraryStoreError.orphanTaskSource(
+                taskID: task.id,
+                recordingID: sourceRecordingID
+            )
+        }
+
         if let index = archive.tasks.firstIndex(where: { $0.id == task.id }) {
             archive.tasks[index] = task
         } else {
@@ -271,12 +283,24 @@ public actor JSONSuperDictateLibraryStore: SuperDictateLibraryStoring {
             guard taskIDs.insert(task.id).inserted else {
                 throw SuperDictateLibraryStoreError.duplicateTask(task.id)
             }
+            if let sourceRecordingID = task.sourceRecordingID,
+               !recordingIDs.contains(sourceRecordingID) {
+                throw SuperDictateLibraryStoreError.orphanTaskSource(
+                    taskID: task.id,
+                    recordingID: sourceRecordingID
+                )
+            }
         }
 
         var memoryIDs: Set<UUID> = []
         for document in archive.memoryDocuments {
             guard memoryIDs.insert(document.recordingID).inserted else {
                 throw SuperDictateLibraryStoreError.duplicateMemoryDocument(
+                    document.recordingID
+                )
+            }
+            guard recordingIDs.contains(document.recordingID) else {
+                throw SuperDictateLibraryStoreError.orphanMemoryDocument(
                     document.recordingID
                 )
             }
