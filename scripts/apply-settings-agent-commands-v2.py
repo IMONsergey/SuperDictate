@@ -122,11 +122,10 @@ text = replace_once(
     }
 """,
     """    @objc private func clearHistoryClicked(_ sender: NSMenuItem) {
-        guard !history.isEmpty else { return }
         handleProductSettingsCommand(.clearTranscriptHistory)
     }
 """,
-    "legacy clear-history menu clears durable Library too",
+    "legacy full clear works even when recent cache is empty",
 )
 
 text = replace_once(
@@ -142,12 +141,11 @@ text = replace_once(
     }
 """,
     """    @objc private func clearHistoryOverlayClicked(_ sender: NSButton) {
-        guard !history.isEmpty else { return }
         handleProductSettingsCommand(.clearTranscriptHistory)
         showHistoryOverlay()
     }
 """,
-    "overlay clear-history clears durable Library too",
+    "overlay full clear works even when recent cache is empty",
 )
 
 path.write_text(text)
