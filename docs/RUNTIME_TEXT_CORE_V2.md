@@ -26,6 +26,10 @@ Processing order remains:
 
 The existing Parakey self-test suite continues to exercise the legacy entry point, so a behavioral mismatch between the old runtime contract and the shared Core implementation fails the normal production gate.
 
+## Release validation
+
+The final migration head is validated only by the standard read-only production workflow: repository checks, the unchanged Parakey runtime self-test suite, the complete `SuperDictateCoreTests` suite, release app bundle build, strict codesign verification, and real installer/uninstaller smoke. The one-shot patch workflow is not treated as the release signal.
+
 ## Follow-up cleanup
 
 After this migration has remained green, duplicated legacy implementations (`SpeechModelTextRepair`, `TranscriptCorrector`, `FillerWordRemover`) can be removed from `main.swift` only after repository-wide reference checks confirm that no non-test path still depends on them.
