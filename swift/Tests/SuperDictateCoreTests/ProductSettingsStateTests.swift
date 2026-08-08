@@ -11,7 +11,7 @@ extension ProductStateTests {
             removeFillerWords: false,
             speechModelName: "Parakeet",
             speechModelReady: true,
-            historyRetention: .last10,
+            recentTranscriptMode: .last10,
             libraryRecordingCount: 12,
             serviceState: .running,
             permissions: [
@@ -46,7 +46,7 @@ extension ProductStateTests {
             speechModelName: "Local model",
             speechModelDetail: "  Local only  ",
             speechModelReady: false,
-            historyRetention: .off,
+            recentTranscriptMode: .off,
             libraryRecordingCount: -10,
             serviceState: .stopped,
             permissions: [],
@@ -61,11 +61,11 @@ extension ProductStateTests {
         XCTAssertFalse(snapshot.historyEnabled)
     }
 
-    func testHistoryRetentionIsTypedAndBounded() {
-        XCTAssertEqual(SuperDictateHistoryRetention.off.maximumEntryCount, 0)
-        XCTAssertEqual(SuperDictateHistoryRetention.last1.maximumEntryCount, 1)
-        XCTAssertEqual(SuperDictateHistoryRetention.last5.maximumEntryCount, 5)
-        XCTAssertEqual(SuperDictateHistoryRetention.last10.maximumEntryCount, 10)
+    func testRecentTranscriptModeModelsVisibleRowsNotDurableRetention() {
+        XCTAssertEqual(SuperDictateRecentTranscriptMode.off.visibleEntryCount, 0)
+        XCTAssertEqual(SuperDictateRecentTranscriptMode.last1.visibleEntryCount, 1)
+        XCTAssertEqual(SuperDictateRecentTranscriptMode.last5.visibleEntryCount, 5)
+        XCTAssertEqual(SuperDictateRecentTranscriptMode.last10.visibleEntryCount, 10)
 
         let snapshot = SuperDictateSettingsSnapshot(
             primaryShortcut: "Right Command",
@@ -74,19 +74,23 @@ extension ProductStateTests {
             removeFillerWords: false,
             speechModelName: "Parakeet",
             speechModelReady: true,
-            historyRetention: .last5,
-            libraryRecordingCount: 5,
+            recentTranscriptMode: .last5,
+            libraryRecordingCount: 37,
             serviceState: .running,
             permissions: [],
             appVersion: "1.0",
             updateState: .checking
         )
+
         XCTAssertTrue(snapshot.historyEnabled)
-        XCTAssertEqual(snapshot.historyRetention, .last5)
+        XCTAssertEqual(snapshot.recentTranscriptMode.visibleEntryCount, 5)
+        XCTAssertEqual(snapshot.libraryRecordingCount, 37)
     }
 
     func testClearHistoryCommandIsExplicitlyDestructiveAcrossCaches() {
-        let command = SuperDictateSettingsCommand.clearTranscriptHistory
-        XCTAssertEqual(command, .clearTranscriptHistory)
+        XCTAssertEqual(
+            SuperDictateSettingsCommand.clearTranscriptHistory,
+            .clearTranscriptHistory
+        )
     }
 }
