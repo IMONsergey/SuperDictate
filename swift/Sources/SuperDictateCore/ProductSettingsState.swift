@@ -5,7 +5,6 @@ public enum SuperDictateSettingsSection: String, CaseIterable, Sendable, Identif
     case models
     case privacy
     case system
-
     public var id: String { rawValue }
 }
 
@@ -13,7 +12,6 @@ public enum SuperDictatePermissionKind: String, Codable, CaseIterable, Sendable,
     case microphone
     case accessibility
     case inputMonitoring = "input_monitoring"
-
     public var id: String { rawValue }
 }
 
@@ -25,7 +23,6 @@ public enum SuperDictatePermissionState: String, Codable, Sendable {
 public struct SuperDictatePermissionStatus: Codable, Equatable, Sendable, Identifiable {
     public var kind: SuperDictatePermissionKind
     public var state: SuperDictatePermissionState
-
     public var id: String { kind.rawValue }
 
     public init(kind: SuperDictatePermissionKind, state: SuperDictatePermissionState) {
@@ -45,21 +42,18 @@ public enum SuperDictateSettingsUpdateState: Equatable, Sendable {
     case checking
     case current(version: String)
     case available(version: String)
+    case installing(version: String, phase: String)
     case failed(message: String)
 }
 
 /// Mirrors the current runtime `RecentTranscriptLimit` exactly.
-///
-/// Numeric values control only how many rows appear in the quick recent-history
-/// surface. They are *not* durable retention caps: while history is enabled the
-/// runtime can keep a larger local archive/Library. `.off` is the one stronger
-/// privacy state — it disables transcript history and clears the local archive.
+/// Numeric values control only the quick recent-history surface, not durable
+/// retention. `.off` is the stronger privacy state that disables history.
 public enum SuperDictateRecentTranscriptMode: String, Codable, CaseIterable, Sendable, Identifiable {
     case off
     case last1 = "1"
     case last5 = "5"
     case last10 = "10"
-
     public var id: String { rawValue }
 
     public var visibleEntryCount: Int {
@@ -72,8 +66,6 @@ public enum SuperDictateRecentTranscriptMode: String, Codable, CaseIterable, Sen
     }
 }
 
-/// User-facing projection of the existing runtime settings and service state.
-/// This is deliberately not a second persistence model.
 public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
     public var primaryShortcut: String
     public var alternateShortcut: String?
@@ -81,14 +73,11 @@ public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
     public var triggerMode: String
     public var completionBehavior: String
     public var removeFillerWords: Bool
-
     public var speechModelName: String
     public var speechModelDetail: String?
     public var speechModelReady: Bool
-
     public var recentTranscriptMode: SuperDictateRecentTranscriptMode
     public var libraryRecordingCount: Int
-
     public var serviceState: SuperDictateServiceState
     public var permissions: [SuperDictatePermissionStatus]
     public var appVersion: String
@@ -128,14 +117,10 @@ public struct SuperDictateSettingsSnapshot: Equatable, Sendable {
         self.updateState = updateState
     }
 
-    public var historyEnabled: Bool {
-        recentTranscriptMode != .off
-    }
-
+    public var historyEnabled: Bool { recentTranscriptMode != .off }
     public var missingPermissions: [SuperDictatePermissionStatus] {
         permissions.filter { $0.state == .missing }
     }
-
     public var needsSystemAttention: Bool {
         serviceState == .needsAttention || !missingPermissions.isEmpty
     }
@@ -152,9 +137,6 @@ public enum SuperDictateSettingsCommand: Equatable, Sendable {
     case setRemoveFillerWords(Bool)
     case openModelManager
     case setRecentTranscriptMode(SuperDictateRecentTranscriptMode)
-    /// Explicit transcript-history deletion. The agent must clear both its
-    /// bounded recent cache and the durable Library so migration cannot
-    /// immediately recreate data the user just asked to remove.
     case clearTranscriptHistory
     case openPermission(SuperDictatePermissionKind)
     case startService
