@@ -184,14 +184,12 @@ private func productRecordingTitle(text: String, language: InterfaceLanguage) ->
 private func stableProductRecordingID(text: String, occurrence: Int) -> UUID {
     var hasher = SHA256()
     hasher.update(data: Data("superdictate-history-v1\u{0}\(occurrence)\u{0}\(text)".utf8))
-    let digest = Array(hasher.finalize().prefix(16))
-    let hex = digest.map { String(format: "%02x", $0) }.joined()
-    let uuidString = [
-        String(hex.prefix(8)),
-        String(hex.dropFirst(8).prefix(4)),
-        String(hex.dropFirst(12).prefix(4)),
-        String(hex.dropFirst(16).prefix(4)),
-        String(hex.dropFirst(20).prefix(12)),
-    ].joined(separator: "-")
-    return UUID(uuidString: uuidString) ?? UUID()
+    let bytes = Array(hasher.finalize().prefix(16))
+    guard bytes.count == 16 else { return UUID() }
+    return UUID(uuid: (
+        bytes[0], bytes[1], bytes[2], bytes[3],
+        bytes[4], bytes[5], bytes[6], bytes[7],
+        bytes[8], bytes[9], bytes[10], bytes[11],
+        bytes[12], bytes[13], bytes[14], bytes[15]
+    ))
 }
