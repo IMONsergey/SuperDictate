@@ -29,6 +29,9 @@ public enum SuperDictateMemoryManifestError: Error, Equatable, Sendable {
     case invalidByteLength(Int64)
     case duplicateChunk(UUID)
     case duplicateSequence(source: SuperDictateMemoryAudioSource, sequence: Int)
+    case chunkAppendNotAllowed(SuperDictateMemorySessionState)
+    case invalidStateTransition(from: SuperDictateMemorySessionState, to: SuperDictateMemorySessionState)
+    case invalidIssueState
 }
 
 /// Immutable finalized source chunk referenced by a Memory Capture package.
@@ -150,9 +153,9 @@ public struct SuperDictateMemoryRecordingManifest: Codable, Equatable, Sendable 
 
     public var recordingID: UUID
     public var createdAt: Date
-    public var state: SuperDictateMemorySessionState
+    public private(set) var state: SuperDictateMemorySessionState
     public var chunks: [SuperDictateMemoryAudioChunk]
-    public var issue: String?
+    public private(set) var issue: String?
 
     private enum CodingKeys: String, CodingKey {
         case recordingID
@@ -173,8 +176,7 @@ public struct SuperDictateMemoryRecordingManifest: Codable, Equatable, Sendable 
         self.createdAt = createdAt
         self.state = state
         self.chunks = chunks
-        let trimmedIssue = issue?.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.issue = trimmedIssue?.isEmpty == false ? trimmedIssue : nil
+        self.issue = Self.normalizedIssue(issue)
         try validate()
     }
 
@@ -190,6 +192,9 @@ public struct SuperDictateMemoryRecordingManifest: Codable, Equatable, Sendable 
     }
 
     public mutating func appendFinalizedChunk(_ chunk: SuperDictateMemoryAudioChunk) throws {
+        guard state == .recording || state == .finalizing else {
+            throw SuperDictateMemoryManifestError.chunkAppendNotAllowed(state)
+        }
         chunks.append(chunk)
         do {
             try validate()
@@ -197,6 +202,43 @@ public struct SuperDictateMemoryRecordingManifest: Codable, Equatable, Sendable 
             chunks.removeLast()
             throw error
         }
+    }
+
+    public mutating func beginFinalization() throws {
+        guard state == .recording || state == .needsAttention else {
+            throw SuperDictateMemoryManifestError.invalidStateTransition(
+                from: state,
+                to: .finalizing
+            )
+        }
+        state = .finalizing
+        issue = nil
+    }
+
+    public mutating func markReady() throws {
+        guard state == .finalizing else {
+            throw SuperDictateMemoryManifestError.invalidStateTransition(
+                from: state,
+                to: .ready
+            )
+        }
+        state = .ready
+        issue = nil
+    }
+
+    public mutating func markNeedsAttention(_ message: String) throws {
+        let normalized = Self.normalizedIssue(message)
+        guard let normalized else {
+            throw SuperDictateMemoryManifestError.invalidIssueState
+        }
+        guard state != .ready else {
+            throw SuperDictateMemoryManifestError.invalidStateTransition(
+                from: state,
+                to: .needsAttention
+            )
+        }
+        state = .needsAttention
+        issue = normalized
     }
 
     public func chunks(for source: SuperDictateMemoryAudioSource) -> [SuperDictateMemoryAudioChunk] {
@@ -209,6 +251,17 @@ public struct SuperDictateMemoryRecordingManifest: Codable, Equatable, Sendable 
     }
 
     public func validate() throws {
+        switch state {
+        case .needsAttention:
+            guard issue != nil else {
+                throw SuperDictateMemoryManifestError.invalidIssueState
+            }
+        case .recording, .finalizing, .ready:
+            guard issue == nil else {
+                throw SuperDictateMemoryManifestError.invalidIssueState
+            }
+        }
+
         var chunkIDs: Set<UUID> = []
         var sequences: [SuperDictateMemoryAudioSource: Set<Int>] = [:]
 
@@ -225,5 +278,11 @@ public struct SuperDictateMemoryRecordingManifest: Codable, Equatable, Sendable 
             }
             sequences[chunk.source] = sourceSequences
         }
+    }
+
+    private static func normalizedIssue(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
